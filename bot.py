@@ -15,6 +15,8 @@ PAIR = "XBTEUR"
 INITIAL = 1000.0
 FEE = 0.008
 SLIP = 0.0002
+MAX_OPEN = 3
+MAX_GROSS_EXPOSURE = 0.30
 
 def api(endpoint, params):
     from urllib.parse import urlencode
@@ -121,8 +123,20 @@ def marked_equity(cash, btc, bid, ask):
 def init(db):
     db.execute("CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), cash REAL, btc REAL, entry REAL, opened INTEGER, day TEXT, day_start REAL, buys INTEGER, last_buy INTEGER, last_candle INTEGER)")
     db.execute("CREATE TABLE IF NOT EXISTS trades (timestamp TEXT, side TEXT, btc REAL, price REAL, fee REAL, reason TEXT, equity REAL)")
+    db.execute("CREATE TABLE IF NOT EXISTS positions (id INTEGER PRIMARY KEY AUTOINCREMENT, btc REAL NOT NULL, entry REAL NOT NULL, opened INTEGER NOT NULL)")
     db.execute("INSERT OR IGNORE INTO state VALUES (1, ?, 0, 0, 0, '', ?, 0, 0, 0)", (INITIAL, INITIAL))
+    # One-time migration of a legacy open position; retain cash and trade history.
+    legacy = db.execute("SELECT btc,entry,opened FROM state WHERE id=1").fetchone()
+    if legacy[0] != 0:
+        db.execute("INSERT INTO positions(btc,entry,opened) VALUES (?,?,?)", legacy)
+        db.execute("UPDATE state SET btc=0,entry=0,opened=0 WHERE id=1")
     db.commit()
+
+def positions(db):
+    return db.execute("SELECT id,btc,entry,opened FROM positions ORDER BY id").fetchall()
+
+def portfolio_equity(cash, items, bid, ask):
+    return marked_equity(cash, sum(p[1] for p in items), bid, ask)
 
 def trade(db, side, amount, price, fee, reason, equity):
     db.execute("INSERT INTO trades VALUES (?,?,?,?,?,?,?)", (dt.datetime.now(dt.timezone.utc).isoformat(), side, amount, price, fee, reason, equity))
@@ -132,14 +146,14 @@ def run():
     pathlib.Path(DB).parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB, timeout=30)
     init(db)
-    log.info("PAPER ONLY started, database=%s, initial balance=EUR %.2f", DB, INITIAL)
+    log.info("PAPER ONLY started, database=%s, max_positions=%d", DB, MAX_OPEN)
     while True:
         try:
             now = int(time.time())
             result = api("OHLC", {"pair": PAIR, "interval": 1})
             key = next(k for k in result if k != "last")
-            candles = result[key][:-1]  # exclude still-forming minute
-            if len(candles) < 30 or now - int(candles[-1][0]) > 180:
+            candles = result[key][:-1]
+            if len(candles) < 90 or now - int(candles[-1][0]) > 180:
                 log.warning("Stale/insufficient candles; no trading")
                 time.sleep(15)
                 continue
@@ -150,72 +164,91 @@ def run():
                 log.warning("Spread too wide; skip")
                 time.sleep(15)
                 continue
-            cash, btc, entry, opened, day, day_start, buys, last_buy, last_candle = db.execute("SELECT cash,btc,entry,opened,day,day_start,buys,last_buy,last_candle FROM state WHERE id=1").fetchone()
+            cash, day, day_start, buys, last_buy, last_candle = db.execute(
+                "SELECT cash,day,day_start,buys,last_buy,last_candle FROM state WHERE id=1"
+            ).fetchone()
+            items = positions(db)
             today = dt.datetime.now(dt.timezone.utc).date().isoformat()
-            equity = marked_equity(cash, btc, bid, ask)
             if today != day:
-                day, day_start, buys = today, equity, 0
-            exit_reason = None
-            if btc > 0:
-                if bid <= entry * (1 - 0.012): exit_reason = "stop_loss"
-                elif bid >= entry * (1 + 0.03): exit_reason = "take_profit"
-                elif now - opened >= 45 * 60: exit_reason = "time_limit"
-                if exit_reason:
-                    price = bid * (1 - SLIP)
-                    proceeds = btc * price
-                    fee = proceeds * FEE
-                    cash += proceeds - fee
-                    trade(db, "SELL_LONG", btc, price, fee, exit_reason, cash)
-                    log.info("PAPER CLOSE LONG reason=%s equity=%.2f", exit_reason, cash)
-                    btc, entry, opened = 0, 0, 0
-            elif btc < 0:
-                if ask >= entry * (1 + 0.012): exit_reason = "stop_loss"
-                elif ask <= entry * (1 - 0.03): exit_reason = "take_profit"
-                elif now - opened >= 45 * 60: exit_reason = "time_limit"
-                if exit_reason:
-                    price = ask * (1 + SLIP)
-                    cost = -btc * price
-                    fee = cost * FEE
-                    cash -= cost + fee
-                    trade(db, "BUY_TO_COVER", -btc, price, fee, exit_reason, cash)
-                    log.info("PAPER CLOSE SHORT reason=%s equity=%.2f", exit_reason, cash)
-                    btc, entry, opened = 0, 0, 0
+                day, day_start, buys = today, portfolio_equity(cash, items, bid, ask), 0
+            closed_any = False
+            for pos_id, amount, entry, opened in items:
+                reason = None
+                if amount > 0:
+                    if bid <= entry * (1 - 0.012): reason = "stop_loss"
+                    elif bid >= entry * (1 + 0.03): reason = "take_profit"
+                    elif now - opened >= 45 * 60: reason = "time_limit"
+                    if reason:
+                        price = bid * (1 - SLIP)
+                        proceeds = amount * price
+                        fee = proceeds * FEE
+                        cash += proceeds - fee
+                        side, quantity = "SELL_LONG", amount
+                else:
+                    if ask >= entry * (1 + 0.012): reason = "stop_loss"
+                    elif ask <= entry * (1 - 0.03): reason = "take_profit"
+                    elif now - opened >= 45 * 60: reason = "time_limit"
+                    if reason:
+                        price = ask * (1 + SLIP)
+                        quantity = -amount
+                        fee = quantity * price * FEE
+                        cash -= quantity * price + fee
+                        side = "BUY_TO_COVER"
+                if reason:
+                    db.execute("DELETE FROM positions WHERE id=?", (pos_id,))
+                    remaining = positions(db)
+                    equity = portfolio_equity(cash, remaining, bid, ask)
+                    trade(db, side, quantity, price, fee, reason, equity)
+                    log.info("PAPER CLOSE position=%d side=%s reason=%s equity=%.2f", pos_id, side, reason, equity)
+                    closed_any = True
+            items = positions(db)
             candle_time = int(candles[-1][0])
-            # A position cannot be reversed in the same polling cycle.
-            daily_ok = marked_equity(cash, btc, bid, ask) >= day_start * 0.97
-            if btc == 0 and exit_reason is None and daily_ok and buys < 8 and now - last_buy >= 900 and candle_time != last_candle:
+            equity = portfolio_equity(cash, items, bid, ask)
+            daily_ok = equity >= day_start * 0.97
+            gross = sum(abs(p[1]) * (ask if p[1] < 0 else bid) for p in items)
+            if (not closed_any and daily_ok and len(items) < MAX_OPEN and buys < 8
+                    and now - last_buy >= 900 and candle_time != last_candle):
                 direction = signal(candles)
-                regime = market_regime() if direction != "WAIT" else "SIDEWAYS"
-                if (direction == "LONG" and regime != "BULL") or (direction == "SHORT" and regime != "BEAR"):
-                    log.info("PAPER entry blocked by market regime=%s signal=%s", regime, direction)
+                if direction != "WAIT":
+                    regime = market_regime()
+                    if (direction == "LONG" and regime != "BULL") or (direction == "SHORT" and regime != "BEAR"):
+                        log.info("PAPER entry blocked by market regime=%s signal=%s", regime, direction)
+                        direction = "WAIT"
+                # Do not hold opposing long and short positions simultaneously.
+                if items and ((direction == "LONG" and items[0][1] < 0)
+                              or (direction == "SHORT" and items[0][1] > 0)):
                     direction = "WAIT"
-                # Max 10% of current equity, no leverage; simulated short collateral
-                # is covered by the other 90% of available cash.
-                budget = min(max(0, marked_equity(cash, btc, bid, ask)) * 0.10, cash * 0.10)
-                if direction == "LONG" and entry_quality(candles, direction) and liquidity_and_atr_ok(candles) and budget > 5:
-                    price = ask * (1 + SLIP)
-                    amount = budget / (price * (1 + FEE))
-                    fee = amount * price * FEE
-                    cash -= amount * price + fee
-                    btc, entry, opened = amount, price, now
+                budget = min(max(0, equity) * 0.10,
+                             max(0, equity * MAX_GROSS_EXPOSURE - gross),
+                             max(0, cash) * 0.10)
+                if (direction in ("LONG", "SHORT") and budget > 5
+                        and entry_quality(candles, direction)
+                        and liquidity_and_atr_ok(candles)):
+                    if direction == "LONG":
+                        price = ask * (1 + SLIP)
+                        amount = budget / (price * (1 + FEE))
+                        fee = amount * price * FEE
+                        cash -= amount * price + fee
+                        side = "BUY_LONG"
+                    else:
+                        price = bid * (1 - SLIP)
+                        amount = -budget / price
+                        fee = -amount * price * FEE
+                        cash += -amount * price - fee
+                        side = "SELL_SHORT"
+                    db.execute("INSERT INTO positions(btc,entry,opened) VALUES (?,?,?)", (amount, price, now))
                     buys += 1
                     last_buy = now
-                    trade(db, "BUY_LONG", amount, price, fee, "ema9_21", marked_equity(cash, btc, bid, ask))
-                    log.info("PAPER OPEN LONG %.8f BTC @ %.2f", btc, price)
-                elif direction == "SHORT" and entry_quality(candles, direction) and liquidity_and_atr_ok(candles) and budget > 5:
-                    price = bid * (1 - SLIP)
-                    amount = budget / price
-                    fee = amount * price * FEE
-                    cash += amount * price - fee
-                    btc, entry, opened = -amount, price, now
-                    buys += 1
-                    last_buy = now
-                    trade(db, "SELL_SHORT", amount, price, fee, "ema9_21", marked_equity(cash, btc, bid, ask))
-                    log.info("PAPER OPEN SHORT %.8f BTC @ %.2f", amount, price)
+                    items = positions(db)
+                    trade(db, side, abs(amount), price, fee, "ema9_21", portfolio_equity(cash, items, bid, ask))
+                    log.info("PAPER OPEN %s %.8f BTC @ %.2f positions=%d", direction, abs(amount), price, len(items))
             last_candle = candle_time
-            db.execute("UPDATE state SET cash=?,btc=?,entry=?,opened=?,day=?,day_start=?,buys=?,last_buy=?,last_candle=? WHERE id=1", (cash,btc,entry,opened,day,day_start,buys,last_buy,last_candle))
+            db.execute("UPDATE state SET cash=?,day=?,day_start=?,buys=?,last_buy=?,last_candle=? WHERE id=1",
+                       (cash, day, day_start, buys, last_buy, last_candle))
             db.commit()
-            log.info("PAPER status equity=%.2f cash=%.2f btc=%.8f direction=%s entries_today=%d", marked_equity(cash, btc, bid, ask), cash, btc, "LONG" if btc > 0 else "SHORT" if btc < 0 else "WAIT", buys)
+            items = positions(db)
+            log.info("PAPER status equity=%.2f cash=%.2f positions=%d btc=%.8f entries_today=%d",
+                     portfolio_equity(cash, items, bid, ask), cash, len(items), sum(p[1] for p in items), buys)
         except Exception:
             log.exception("Cycle failed; retrying; NO live orders")
             db.rollback()
