@@ -48,7 +48,7 @@ def read_csv(path):
             raise ValueError("Invalid price or volume")
     return data
 
-def evaluate(rows, spread_bps=5):
+def evaluate(rows, spread_bps=5, start_bar=220):
     closes=[r[4] for r in rows]
     fast,slow=ema(closes,9),ema(closes,21)
     cash=START
@@ -56,20 +56,21 @@ def evaluate(rows, spread_bps=5):
     last_entry=-COOLDOWN
     trades=[]
     equity_curve=[START]
-    # Signals use completed candle i; next-bar open is the earliest possible fill.
-    for i in range(220,len(rows)-1):
+    # Signals use completed candle i; next-bar open is the earliest possible fill.\n    # A 4h regime filter is still absent; do not treat this as production parity.
+    for i in range(max(220,start_bar),len(rows)-1):
         _,_,high,low,close,vol=rows[i]
         next_open=rows[i+1][1]
         if open_pos is not None:
             side,entry,qty,fee_in,opened=open_pos
             # Conservative same-bar stop-first when both targets are touched.
             exit_mid=None
-            if side==1:
-                if low<=entry*(1-STOP): exit_mid=entry*(1-STOP)
-                elif high>=entry*(1+TAKE): exit_mid=entry*(1+TAKE)
-            else:
-                if high>=entry*(1+STOP): exit_mid=entry*(1+STOP)
-                elif low<=entry*(1-TAKE): exit_mid=entry*(1-TAKE)
+            if i >= opened:
+                if side==1:
+                    if low<=entry*(1-STOP): exit_mid=entry*(1-STOP)
+                    elif high>=entry*(1+TAKE): exit_mid=entry*(1+TAKE)
+                else:
+                    if high>=entry*(1+STOP): exit_mid=entry*(1+STOP)
+                    elif low<=entry*(1-TAKE): exit_mid=entry*(1-TAKE)
             if exit_mid is None and i-opened>=HOLD_BARS:
                 exit_mid=next_open
             if exit_mid is not None:
@@ -125,9 +126,8 @@ def main():
         raise SystemExit("Usage: python backtest.py historical_1m.csv")
     data=read_csv(sys.argv[1])
     split=int(len(data)*.7)
-    # Warm-up for indicators on holdout without leaking holdout into training.
-    print(json.dumps({"in_sample":evaluate(data[:split]),
-                      "out_of_sample":evaluate(data[max(0,split-220):]),
+    # Holdout indicators warm up using earlier candles, but scoring starts at split.\n    # Training trades do not carry over into holdout.\n    print(json.dumps({"in_sample":evaluate(data[:split]),
+                      "out_of_sample":evaluate(data, start_bar=split),
                       "caveat":"Simplified 1m proxy; production 4h regime gate not reproduced. Do not use as production validation."},indent=2))
 if __name__=="__main__":
     main()
