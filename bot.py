@@ -46,6 +46,23 @@ def signal(candles):
         return "SHORT"
     return "WAIT"
 
+def entry_quality(candles, direction):
+    """Conservative volatility/trend filter, NOT a profit prediction."""
+    if direction == "WAIT" or len(candles) < 90:
+        return False
+    close = [float(x[4]) for x in candles]
+    high = max(float(x[2]) for x in candles[-60:])
+    low = min(float(x[3]) for x in candles[-60:])
+    if low <= 0:
+        return False
+    hourly_range = high / low - 1
+    # Round-trip fee+slippage alone costs ~1.64% before spread.
+    # Require substantially more observed movement before risking a new entry.
+    minimum_range = 2 * (FEE + SLIP) + 0.015
+    trend = close[-1] / close[-61] - 1
+    trend_ok = trend >= 0.008 if direction == "LONG" else trend <= -0.008
+    return hourly_range >= minimum_range and trend_ok
+
 def marked_equity(cash, btc, bid, ask):
     """Conservative close-out valuation including simulated taker fee/slippage."""
     if btc > 0:
@@ -119,12 +136,12 @@ def run():
             candle_time = int(candles[-1][0])
             # A position cannot be reversed in the same polling cycle.
             daily_ok = marked_equity(cash, btc, bid, ask) >= day_start * 0.97
-            if btc == 0 and exit_reason is None and daily_ok and buys < 12 and now - last_buy >= 600 and candle_time != last_candle:
+            if btc == 0 and exit_reason is None and daily_ok and buys < 4 and now - last_buy >= 3600 and candle_time != last_candle:
                 direction = signal(candles)
                 # Max 10% of current equity, no leverage; simulated short collateral
                 # is covered by the other 90% of available cash.
                 budget = min(max(0, marked_equity(cash, btc, bid, ask)) * 0.10, cash * 0.10)
-                if direction == "LONG" and budget > 5:
+                if direction == "LONG" and entry_quality(candles, direction) and budget > 5:
                     price = ask * (1 + SLIP)
                     amount = budget / (price * (1 + FEE))
                     fee = amount * price * FEE
@@ -134,7 +151,7 @@ def run():
                     last_buy = now
                     trade(db, "BUY_LONG", amount, price, fee, "ema9_21", marked_equity(cash, btc, bid, ask))
                     log.info("PAPER OPEN LONG %.8f BTC @ %.2f", btc, price)
-                elif direction == "SHORT" and budget > 5:
+                elif direction == "SHORT" and entry_quality(candles, direction) and budget > 5:
                     price = bid * (1 - SLIP)
                     amount = budget / price
                     fee = amount * price * FEE
