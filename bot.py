@@ -16,6 +16,9 @@ INITIAL = 1000.0
 FEE = 0.008
 SLIP = 0.0002
 MAX_OPEN = 3
+MAX_DAILY_ENTRIES = 16  # experimental paper scalping ceiling, not a target
+ENTRY_COOLDOWN_SECONDS = 300
+MAX_HOLD_SECONDS = 15 * 60
 MAX_GROSS_EXPOSURE = 0.30
 # Kraken Pro base-tier taker fee (0.80% per side); marketable paper fills.
 # The spread is represented by ask on entry/bid on exit (reverse for shorts).
@@ -64,9 +67,9 @@ def entry_quality(candles, direction):
     hourly_range = high / low - 1
     # Round-trip fee+slippage alone costs ~1.64% before spread.
     # Require substantially more observed movement before risking a new entry.
-    minimum_range = 2 * (FEE + SLIP) + 0.005
+    minimum_range = 2 * (FEE + SLIP) + 0.002
     trend = close[-1] / close[-61] - 1
-    trend_ok = trend >= 0.004 if direction == "LONG" else trend <= -0.004
+    trend_ok = trend >= 0.002 if direction == "LONG" else trend <= -0.002
     return hourly_range >= minimum_range and trend_ok
 
 def liquidity_and_atr_ok(candles):
@@ -218,7 +221,7 @@ def run():
                 if amount > 0:
                     if bid <= entry * (1 - 0.012): reason = "stop_loss"
                     elif bid >= entry * (1 + 0.03): reason = "take_profit"
-                    elif now - opened >= 45 * 60: reason = "time_limit"
+                    elif now - opened >= MAX_HOLD_SECONDS: reason = "time_limit"
                     if reason:
                         price = bid * (1 - SLIP)
                         proceeds = amount * price
@@ -228,7 +231,7 @@ def run():
                 else:
                     if ask >= entry * (1 + 0.012): reason = "stop_loss"
                     elif ask <= entry * (1 - 0.03): reason = "take_profit"
-                    elif now - opened >= 45 * 60: reason = "time_limit"
+                    elif now - opened >= MAX_HOLD_SECONDS: reason = "time_limit"
                     if reason:
                         price = ask * (1 + SLIP)
                         quantity = -amount
@@ -261,12 +264,12 @@ def run():
             equity = portfolio_equity(cash, items, bid, ask)
             daily_ok = equity >= day_start * 0.97
             gross = sum(abs(p[1]) * (ask if p[1] < 0 else bid) for p in items)
-            if (not closed_any and daily_ok and len(items) < MAX_OPEN and buys < 8
-                    and now - last_buy >= 900 and candle_time != last_candle):
+            if (not closed_any and daily_ok and len(items) < MAX_OPEN and buys < MAX_DAILY_ENTRIES
+                    and now - last_buy >= ENTRY_COOLDOWN_SECONDS and candle_time != last_candle):
                 direction = signal(candles)
                 if direction != "WAIT":
                     regime = market_regime()
-                    if (direction == "LONG" and regime != "BULL") or (direction == "SHORT" and regime != "BEAR"):
+                    if (direction == "LONG" and regime == "BEAR") or (direction == "SHORT" and regime == "BULL"):
                         log.info("PAPER entry blocked by market regime=%s signal=%s", regime, direction)
                         direction = "WAIT"
                 # Do not hold opposing long and short positions simultaneously.
