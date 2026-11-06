@@ -13,7 +13,7 @@ def main():
     if len(sys.argv)!=3:
         raise SystemExit("Usage: python import_kraken_archive.py archive.zip output.csv")
     with zipfile.ZipFile(sys.argv[1]) as z:
-        matches=[n for n in z.namelist() if n.rsplit("/",1)[-1].upper() in ("XBTEUR_1.CSV","XXBTEUR_1.CSV","BTCEUR_1.CSV")]
+        matches=[n for n in z.namelist() if n.rsplit("/",1)[-1].upper() in ("XBTEUR_1.CSV","XXBTEUR_1.CSV","XXBTZEUR_1.CSV","XBTZEUR_1.CSV","BTCEUR_1.CSV")]
         if len(matches)!=1:
             raise RuntimeError("Expected exactly one BTC/EUR 1m CSV; found: "+str(matches))
         with z.open(matches[0]) as src,open(sys.argv[2],"w",newline="",encoding="utf-8") as dst:
