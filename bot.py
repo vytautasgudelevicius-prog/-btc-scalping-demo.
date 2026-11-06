@@ -17,6 +17,10 @@ FEE = 0.008
 SLIP = 0.0002
 MAX_OPEN = 3
 MAX_GROSS_EXPOSURE = 0.30
+# Kraken Pro base-tier taker fee (0.80% per side); marketable paper fills.
+# The spread is represented by ask on entry/bid on exit (reverse for shorts).
+# Simulated SHORT is hypothetical: spot Kraken trading does not offer uncollateralized shorts.
+
 
 def api(endpoint, params):
     from urllib.parse import urlencode
@@ -124,6 +128,21 @@ def init(db):
     db.execute("CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), cash REAL, btc REAL, entry REAL, opened INTEGER, day TEXT, day_start REAL, buys INTEGER, last_buy INTEGER, last_candle INTEGER)")
     db.execute("CREATE TABLE IF NOT EXISTS trades (timestamp TEXT, side TEXT, btc REAL, price REAL, fee REAL, reason TEXT, equity REAL)")
     db.execute("CREATE TABLE IF NOT EXISTS positions (id INTEGER PRIMARY KEY AUTOINCREMENT, btc REAL NOT NULL, entry REAL NOT NULL, opened INTEGER NOT NULL)")
+    # Existing positions from older releases are preserved; historical entry fees
+    # cannot be inferred reliably, so they remain NULL and are not fabricated.
+    columns = {row[1] for row in db.execute("PRAGMA table_info(positions)")}
+    if "entry_fee" not in columns:
+        db.execute("ALTER TABLE positions ADD COLUMN entry_fee REAL")
+    if "entry_side" not in columns:
+        db.execute("ALTER TABLE positions ADD COLUMN entry_side TEXT")
+    db.execute("""CREATE TABLE IF NOT EXISTS closed_positions (
+        position_id INTEGER PRIMARY KEY, opened INTEGER NOT NULL,
+        closed TEXT NOT NULL, direction TEXT NOT NULL, btc REAL NOT NULL,
+        entry_price REAL NOT NULL, exit_price REAL NOT NULL,
+        entry_fee REAL, exit_fee REAL NOT NULL,
+        net_pnl REAL, reason TEXT NOT NULL, equity REAL NOT NULL)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS equity_history (
+        timestamp TEXT PRIMARY KEY, equity REAL NOT NULL)""")
     db.execute("INSERT OR IGNORE INTO state VALUES (1, ?, 0, 0, 0, '', ?, 0, 0, 0)", (INITIAL, INITIAL))
     # One-time migration of a legacy open position; retain cash and trade history.
     legacy = db.execute("SELECT btc,entry,opened FROM state WHERE id=1").fetchone()
@@ -133,10 +152,32 @@ def init(db):
     db.commit()
 
 def positions(db):
-    return db.execute("SELECT id,btc,entry,opened FROM positions ORDER BY id").fetchall()
+    return db.execute("SELECT id,btc,entry,opened,entry_fee,entry_side FROM positions ORDER BY id").fetchall()
 
 def portfolio_equity(cash, items, bid, ask):
     return marked_equity(cash, sum(p[1] for p in items), bid, ask)
+
+def trade_statistics(db, current_equity):
+    """Realized PnL only when both entry and exit costs are known."""
+    rows = db.execute("SELECT net_pnl FROM closed_positions WHERE net_pnl IS NOT NULL").fetchall()
+    wins = [r[0] for r in rows if r[0] > 0]
+    losses = [r[0] for r in rows if r[0] < 0]
+    # Drawdown includes conservative marked-to-close equity observations.
+    samples = [INITIAL] + [r[0] for r in db.execute(
+        "SELECT equity FROM equity_history ORDER BY timestamp")] + [current_equity]
+    peak = samples[0]
+    max_dd = 0.0
+    for value in samples:
+        peak = max(peak, value)
+        if peak > 0:
+            max_dd = max(max_dd, (peak - value) / peak * 100)
+    return {"closed": len(rows), "wins": len(wins), "losses": len(losses),
+            "win_rate": 100 * len(wins) / len(rows) if rows else 0.0,
+            "avg_win": sum(wins) / len(wins) if wins else 0.0,
+            "avg_loss": sum(losses) / len(losses) if losses else 0.0,
+            "net_pnl": sum(r[0] for r in rows), "max_dd": max_dd,
+            "unknown": db.execute("SELECT COUNT(*) FROM closed_positions WHERE net_pnl IS NULL").fetchone()[0]}
+
 
 def trade(db, side, amount, price, fee, reason, equity):
     db.execute("INSERT INTO trades VALUES (?,?,?,?,?,?,?)", (dt.datetime.now(dt.timezone.utc).isoformat(), side, amount, price, fee, reason, equity))
@@ -172,7 +213,7 @@ def run():
             if today != day:
                 day, day_start, buys = today, portfolio_equity(cash, items, bid, ask), 0
             closed_any = False
-            for pos_id, amount, entry, opened in items:
+            for pos_id, amount, entry, opened, entry_fee, entry_side in items:
                 reason = None
                 if amount > 0:
                     if bid <= entry * (1 - 0.012): reason = "stop_loss"
@@ -199,7 +240,21 @@ def run():
                     remaining = positions(db)
                     equity = portfolio_equity(cash, remaining, bid, ask)
                     trade(db, side, quantity, price, fee, reason, equity)
-                    log.info("PAPER CLOSE position=%d side=%s reason=%s equity=%.2f", pos_id, side, reason, equity)
+                    # Entry and exit execution prices already include slippage.
+                    # Entry/exit bid/ask already account for the observed spread.
+                    pnl = ((price - entry) * quantity if amount > 0 else
+                           (entry - price) * quantity)
+                    net_pnl = pnl - entry_fee - fee if entry_fee is not None else None
+                    closed_at = dt.datetime.now(dt.timezone.utc).isoformat()
+                    db.execute("""INSERT INTO closed_positions
+                        (position_id,opened,closed,direction,btc,entry_price,exit_price,
+                         entry_fee,exit_fee,net_pnl,reason,equity)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (pos_id,opened,closed_at,"LONG" if amount > 0 else "SHORT",
+                         quantity,entry,price,entry_fee,fee,net_pnl,reason,equity))
+                    log.info("PAPER CLOSE position=%d side=%s reason=%s net_pnl=%s equity=%.2f",
+                             pos_id, side, reason,
+                             ("%.4f EUR" % net_pnl) if net_pnl is not None else "UNKNOWN_LEGACY", equity)
                     closed_any = True
             items = positions(db)
             candle_time = int(candles[-1][0])
@@ -236,7 +291,7 @@ def run():
                         fee = -amount * price * FEE
                         cash += -amount * price - fee
                         side = "SELL_SHORT"
-                    db.execute("INSERT INTO positions(btc,entry,opened) VALUES (?,?,?)", (amount, price, now))
+                    db.execute("INSERT INTO positions(btc,entry,opened,entry_fee,entry_side) VALUES (?,?,?,?,?)", (amount, price, now, fee, side))
                     buys += 1
                     last_buy = now
                     items = positions(db)
@@ -245,8 +300,17 @@ def run():
             last_candle = candle_time
             db.execute("UPDATE state SET cash=?,day=?,day_start=?,buys=?,last_buy=?,last_candle=? WHERE id=1",
                        (cash, day, day_start, buys, last_buy, last_candle))
-            db.commit()
+            # Store a timestamped equity sample for realized+unrealized drawdown.
             items = positions(db)
+            equity_now = portfolio_equity(cash, items, bid, ask)
+            stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:00Z")
+            db.execute("INSERT OR REPLACE INTO equity_history(timestamp,equity) VALUES (?,?)",
+                       (stamp, equity_now))
+            db.commit()
+            stats = trade_statistics(db, equity_now)
+            log.info("PAPER STATS closed=%d wins=%d losses=%d win_rate=%.1f%% avg_win=%.4f avg_loss=%.4f net_pnl=%.4f max_drawdown=%.2f%% unknown_legacy=%d",
+                     stats["closed"],stats["wins"],stats["losses"],stats["win_rate"],
+                     stats["avg_win"],stats["avg_loss"],stats["net_pnl"],stats["max_dd"],stats["unknown"])
             log.info("PAPER status equity=%.2f cash=%.2f positions=%d btc=%.8f entries_today=%d",
                      portfolio_equity(cash, items, bid, ask), cash, len(items), sum(p[1] for p in items), buys)
         except Exception:
