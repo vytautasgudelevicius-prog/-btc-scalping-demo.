@@ -1,0 +1,38 @@
+test_five_min_confirmation (test_active.ActiveTests.test_five_min_confirmation) ... ok
+test_limit_fees_and_short_accounting (test_active.ActiveTests.test_limit_fees_and_short_accounting) ... ok
+test_limit_no_touch_no_fill (test_active.ActiveTests.test_limit_no_touch_no_fill) ... ok
+test_opposite_regime_blocks (test_active.ActiveTests.test_opposite_regime_blocks) ... ok
+test_sideways_entries_and_15_min_exit (test_active.ActiveTests.test_sideways_entries_and_15_min_exit) ... ok
+test_flat_market_no_trades (test_backtest.BacktestTests.test_flat_market_no_trades) ... ok
+test_holdout_starts_after_split (test_backtest.BacktestTests.test_holdout_starts_after_split) ... ok
+test_invalid_last_candle_rejected (test_backtest.BacktestTests.test_invalid_last_candle_rejected) ... ok
+test_missing_minute_rejected (test_backtest.BacktestTests.test_missing_minute_rejected) ... ok
+test_close_boundary_and_missing_execution_bar (test_filter_diagnostics.FunnelTests.test_close_boundary_and_missing_execution_bar) ... ok
+test_duplicate_rejected (test_research.ResearchTests.test_duplicate_rejected) ... ok
+test_end_liquidates (test_research.ResearchTests.test_end_liquidates) ... ok
+test_features_match_bot_filters (test_research.ResearchTests.test_features_match_bot_filters) ... ok
+test_formula_both_fees (test_research.ResearchTests.test_formula_both_fees) ... ok
+test_future_does_not_change_features (test_research.ResearchTests.test_future_does_not_change_features) ... ok
+test_gap_exit_next_observed_open (test_research.ResearchTests.test_gap_exit_next_observed_open) ... ok
+test_gap_warmup_blocks (test_research.ResearchTests.test_gap_warmup_blocks) ... ok
+test_long_flat_costs (test_research.ResearchTests.test_long_flat_costs) ... ok
+test_long_stop (test_research.ResearchTests.test_long_stop) ... ok
+test_long_target (test_research.ResearchTests.test_long_target) ... ok
+test_migration_preserves_history_idempotently (test_research.ResearchTests.test_migration_preserves_history_idempotently) ... ok
+test_nonfinite_rejected (test_research.ResearchTests.test_nonfinite_rejected) ... ok
+test_risk_size_reduces_loss (test_research.ResearchTests.test_risk_size_reduces_loss) ... ok
+test_rolling_ema_matches_production (test_research.ResearchTests.test_rolling_ema_matches_production) ... ok
+test_same_bar_stop_first (test_research.ResearchTests.test_same_bar_stop_first) ... ok
+test_short_flat_costs (test_research.ResearchTests.test_short_flat_costs) ... ok
+test_short_stop (test_research.ResearchTests.test_short_stop) ... ok
+test_short_target (test_research.ResearchTests.test_short_target) ... ok
+test_time_exit (test_research.ResearchTests.test_time_exit) ... ok
+test_unclosed_four_hour_not_visible (test_research.ResearchTests.test_unclosed_four_hour_not_visible) ... ok
+test_unknown_pnl_excluded (test_research.ResearchTests.test_unknown_pnl_excluded) ... ok
+test_wide_spread_blocks (test_research.ResearchTests.test_wide_spread_blocks) ... ok
+test_wrong_regime_blocks (test_research.ResearchTests.test_wrong_regime_blocks) ... ok
+
+----------------------------------------------------------------------
+Ran 33 tests in 0.200s
+
+OK

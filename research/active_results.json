@@ -1,0 +1,148 @@
+{
+  "independent_holdout": false,
+  "note": "Prior periods already inspected. Fixed candidate; no optimization. OHLC proxy, hypothetical shorts, no funding.",
+  "last_data_timestamp": 1790812740,
+  "results": {
+    "baseline": {
+      "development": {
+        "trades": 12,
+        "win_rate_pct": 16.666666666666668,
+        "net_pnl": -12.618859137735285,
+        "profit_factor": 0.13631922664082613,
+        "avg_win": 0.9958500708862378,
+        "avg_loss": -1.4610559279507995,
+        "max_drawdown_pct": 1.387042284876975,
+        "fees": 18.99113142374083,
+        "spread_slippage": 1.068252223852789,
+        "long_trades": 4,
+        "short_trades": 8,
+        "gap_exits": 0,
+        "trades_per_calendar_day": 0.03287671232876712
+      },
+      "reused_validation": {
+        "trades": 10,
+        "win_rate_pct": 20.0,
+        "net_pnl": -14.553399936917913,
+        "profit_factor": 0.09923564268422949,
+        "avg_win": 0.8016613802772904,
+        "avg_loss": -2.019590337184087,
+        "max_drawdown_pct": 1.4872546094721768,
+        "fees": 15.91511190925531,
+        "spread_slippage": 0.8952253443172757,
+        "long_trades": 0,
+        "short_trades": 10,
+        "gap_exits": 0,
+        "trades_per_calendar_day": 0.054945054945054944
+      },
+      "reused_test": {
+        "trades": 2,
+        "win_rate_pct": 50.0,
+        "net_pnl": -1.3235658554633574,
+        "profit_factor": 0.06218510394549793,
+        "avg_win": 0.08776367345729663,
+        "avg_loss": -1.4113295289208974,
+        "max_drawdown_pct": 0.23455408992931812,
+        "fees": 3.185246972937739,
+        "spread_slippage": 0.17917044449906372,
+        "long_trades": 0,
+        "short_trades": 2,
+        "gap_exits": 0,
+        "trades_per_calendar_day": 0.01092896174863388
+      }
+    },
+    "active": {
+      "development": {
+        "trades": 1804,
+        "win_rate_pct": 0.0,
+        "net_pnl": -950.0665042447167,
+        "profit_factor": 0.0,
+        "avg_win": null,
+        "avg_loss": -0.5266444036833238,
+        "max_drawdown_pct": 95.00740239452462,
+        "fees": 906.4227304203232,
+        "spread_slippage": 50.98627715656174,
+        "long_trades": 1464,
+        "short_trades": 340,
+        "gap_exits": 51,
+        "trades_per_calendar_day": 4.942465753424657
+      },
+      "reused_validation": {
+        "trades": 1778,
+        "win_rate_pct": 0.0562429696287964,
+        "net_pnl": -950.0361446541385,
+        "profit_factor": 1.0024759229390705e-05,
+        "avg_win": 0.009523979084973572,
+        "avg_loss": -0.5346345912398557,
+        "max_drawdown_pct": 95.00371915024503,
+        "fees": 896.4710160197675,
+        "spread_slippage": 50.42649165114597,
+        "long_trades": 624,
+        "short_trades": 1154,
+        "gap_exits": 50,
+        "trades_per_calendar_day": 9.76923076923077
+      },
+      "reused_test": {
+        "trades": 1792,
+        "win_rate_pct": 0.0,
+        "net_pnl": -950.0119059755544,
+        "profit_factor": 0.0,
+        "avg_win": null,
+        "avg_loss": -0.5301405725310016,
+        "max_drawdown_pct": 95.0016989023238,
+        "fees": 899.1789983066365,
+        "spread_slippage": 50.578816087059224,
+        "long_trades": 881,
+        "short_trades": 911,
+        "gap_exits": 43,
+        "trades_per_calendar_day": 9.792349726775956
+      }
+    },
+    "active_5m": {
+      "development": {
+        "trades": 1804,
+        "win_rate_pct": 0.05543237250554324,
+        "net_pnl": -950.0515168625926,
+        "profit_factor": 6.888188580067818e-05,
+        "avg_win": 0.06544584812272675,
+        "avg_loss": -0.5269644829233034,
+        "max_drawdown_pct": 95.00747307393954,
+        "fees": 910.0363392121997,
+        "spread_slippage": 51.18954322530086,
+        "long_trades": 1226,
+        "short_trades": 578,
+        "gap_exits": 41,
+        "trades_per_calendar_day": 4.942465753424657
+      },
+      "reused_validation": {
+        "trades": 1783,
+        "win_rate_pct": 0.056085249579360626,
+        "net_pnl": -950.0642887565231,
+        "profit_factor": 0.001207552158994546,
+        "avg_win": 1.1486392248474264,
+        "avg_loss": -0.5337895218750671,
+        "max_drawdown_pct": 95.00839812737894,
+        "fees": 903.0080259652941,
+        "spread_slippage": 50.79419949087392,
+        "long_trades": 561,
+        "short_trades": 1222,
+        "gap_exits": 21,
+        "trades_per_calendar_day": 9.796703296703297
+      },
+      "reused_test": {
+        "trades": 1795,
+        "win_rate_pct": 0.0,
+        "net_pnl": -950.0716808192817,
+        "profit_factor": 0.0,
+        "avg_win": null,
+        "avg_loss": -0.5292878444675666,
+        "max_drawdown_pct": 95.00764621543782,
+        "fees": 901.4423526599417,
+        "spread_slippage": 50.70613011852827,
+        "long_trades": 873,
+        "short_trades": 922,
+        "gap_exits": 32,
+        "trades_per_calendar_day": 9.808743169398907
+      }
+    }
+  }
+}

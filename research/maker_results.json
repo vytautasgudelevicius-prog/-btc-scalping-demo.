@@ -1,0 +1,54 @@
+{
+  "independent_holdout": false,
+  "note": "Prior periods already inspected. Fixed candidate; no optimization. OHLC proxy, hypothetical shorts, no funding.",
+  "last_data_timestamp": 1790812740,
+  "results": {
+    "active_maker": {
+      "development": {
+        "trades": 2110,
+        "win_rate_pct": 0.2843601895734597,
+        "net_pnl": -932.8545040609787,
+        "profit_factor": 0.000489396951735787,
+        "avg_win": 0.07612661458319674,
+        "avg_loss": -0.4435890036827369,
+        "max_drawdown_pct": 93.28545147486444,
+        "fees": 869.5178173769547,
+        "spread_slippage": 50.72722045644004,
+        "long_trades": 1232,
+        "short_trades": 878,
+        "gap_exits": 34,
+        "trades_per_calendar_day": 5.780821917808219
+      },
+      "reused_validation": {
+        "trades": 1589,
+        "win_rate_pct": 0.44052863436123346,
+        "net_pnl": -868.6281807281114,
+        "profit_factor": 0.0024829205680119734,
+        "avg_win": 0.30887187230815527,
+        "avg_loss": -0.5504363361784244,
+        "max_drawdown_pct": 86.86298586598478,
+        "fees": 814.079926918005,
+        "spread_slippage": 47.482057399824456,
+        "long_trades": 500,
+        "short_trades": 1089,
+        "gap_exits": 13,
+        "trades_per_calendar_day": 8.73076923076923
+      },
+      "reused_test": {
+        "trades": 1147,
+        "win_rate_pct": 0.0,
+        "net_pnl": -765.9149153889782,
+        "profit_factor": 0.0,
+        "avg_win": null,
+        "avg_loss": -0.6677549393103553,
+        "max_drawdown_pct": 76.59154506416525,
+        "fees": 722.5114259800401,
+        "spread_slippage": 42.146514290155594,
+        "long_trades": 598,
+        "short_trades": 549,
+        "gap_exits": 19,
+        "trades_per_calendar_day": 6.26775956284153
+      }
+    }
+  }
+}

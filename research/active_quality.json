@@ -1,0 +1,14 @@
+{
+  "candles": 1043812,
+  "missing_minutes": 7388,
+  "regime_candles": {
+    "0": 418907,
+    "1": 339717,
+    "-1": 285188
+  },
+  "synthetic": 0,
+  "source_hashes": {
+    "XBTEUR_1.csv": "0774a1b9504dc9461c64628b39223cc1337d2ea938792118b7ed5adc6479b2e8",
+    "XBTEUR_240.csv": "85caa725efa3fa69d6a8c34dc1d47627dcdd16355e01955107f534d5fca87319"
+  }
+}
