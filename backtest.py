@@ -44,8 +44,11 @@ def read_csv(path):
     for a,b in zip(data,data[1:]):
         if (b[0]-a[0]).total_seconds()!=60:
             raise ValueError("Missing, duplicate, or non-1m bars; no forward-filling")
-        if min(a[1:5])<=0 or a[5]<0:
-            raise ValueError("Invalid price or volume")
+        if min(a[1:5])<=0 or a[5]<0 or a[2]<max(a[1],a[4]) or a[3]>min(a[1],a[4]) or a[2]<a[3]:
+            raise ValueError("Invalid OHLCV candle")
+    last=data[-1]
+    if min(last[1:5])<=0 or last[5]<0 or last[2]<max(last[1],last[4]) or last[3]>min(last[1],last[4]) or last[2]<last[3]:
+        raise ValueError("Invalid last OHLCV candle")
     return data
 
 def evaluate(rows, spread_bps=5, start_bar=220):
@@ -56,7 +59,8 @@ def evaluate(rows, spread_bps=5, start_bar=220):
     last_entry=-COOLDOWN
     trades=[]
     equity_curve=[START]
-    # Signals use completed candle i; next-bar open is the earliest possible fill.\n    # A 4h regime filter is still absent; do not treat this as production parity.
+    # Signals use completed candle i; next-bar open is the earliest possible fill.
+    # A 4h regime filter is still absent; do not treat this as production parity.
     for i in range(max(220,start_bar),len(rows)-1):
         _,_,high,low,close,vol=rows[i]
         next_open=rows[i+1][1]
@@ -125,8 +129,12 @@ def main():
     if len(sys.argv)!=2:
         raise SystemExit("Usage: python backtest.py historical_1m.csv")
     data=read_csv(sys.argv[1])
-    split=int(len(data)*.7)\n    if split<250 or len(data)-split<250:\n        raise ValueError("Need >=250 training and >=250 holdout candles")
-    # Holdout indicators warm up using earlier candles, but scoring starts at split.\n    # Training trades do not carry over into holdout.\n    print(json.dumps({"in_sample":evaluate(data[:split]),
+    split=int(len(data)*.7)
+    if split<250 or len(data)-split<250:
+        raise ValueError("Need >=250 training and >=250 holdout candles")
+    # Holdout indicators warm up using earlier candles, but scoring starts at split.
+    # Training trades do not carry over into holdout.
+    print(json.dumps({"in_sample":evaluate(data[:split]),
                       "out_of_sample":evaluate(data, start_bar=split),
                       "caveat":"Simplified 1m proxy; production 4h regime gate not reproduced. Do not use as production validation."},indent=2))
 if __name__=="__main__":
