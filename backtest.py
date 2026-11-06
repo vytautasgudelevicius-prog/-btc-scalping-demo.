@@ -125,7 +125,7 @@ def main():
     if len(sys.argv)!=2:
         raise SystemExit("Usage: python backtest.py historical_1m.csv")
     data=read_csv(sys.argv[1])
-    split=int(len(data)*.7)
+    split=int(len(data)*.7)\n    if split<250 or len(data)-split<250:\n        raise ValueError("Need >=250 training and >=250 holdout candles")
     # Holdout indicators warm up using earlier candles, but scoring starts at split.\n    # Training trades do not carry over into holdout.\n    print(json.dumps({"in_sample":evaluate(data[:split]),
                       "out_of_sample":evaluate(data, start_bar=split),
                       "caveat":"Simplified 1m proxy; production 4h regime gate not reproduced. Do not use as production validation."},indent=2))
