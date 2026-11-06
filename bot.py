@@ -279,9 +279,14 @@ def run():
                 budget = min(max(0, equity) * 0.10,
                              max(0, equity * MAX_GROSS_EXPOSURE - gross),
                              max(0, cash) * 0.10)
+                if direction in ("LONG", "SHORT"):
+                    quality_ok = entry_quality(candles, direction)
+                    liquidity_ok = liquidity_and_atr_ok(candles)
+                    if budget <= 5 or not quality_ok or not liquidity_ok:
+                        log.info("PAPER signal rejected direction=%s budget=%.2f quality_ok=%s liquidity_atr_ok=%s",
+                                 direction, budget, quality_ok, liquidity_ok)
                 if (direction in ("LONG", "SHORT") and budget > 5
-                        and entry_quality(candles, direction)
-                        and liquidity_and_atr_ok(candles)):
+                        and quality_ok and liquidity_ok):
                     if direction == "LONG":
                         price = ask * (1 + SLIP)
                         amount = budget / (price * (1 + FEE))
