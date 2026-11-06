@@ -2,6 +2,7 @@
 import datetime as dt
 import json
 import logging
+import math
 import os
 import sqlite3
 import time
@@ -194,20 +195,28 @@ def run():
     while True:
         try:
             now = int(time.time())
-            result = api("OHLC", {"pair": PAIR, "interval": 1})
-            key = next(k for k in result if k != "last")
-            candles = result[key][:-1]
-            if len(candles) < 90 or now - int(candles[-1][0]) > 180:
-                log.warning("Stale/insufficient candles; no trading")
-                time.sleep(15)
-                continue
+            candles = []
+            try:
+                result = api("OHLC", {"pair": PAIR, "interval": 1})
+                key = next(k for k in result if k != "last")
+                candles = result[key][:-1]
+                candles_ok = (len(candles) >= 90
+                              and 0 <= now - int(candles[-1][0]) <= 180)
+            except Exception:
+                candles_ok = False
+                log.warning("Candle data unavailable; entries disabled", exc_info=True)
+            if not candles_ok:
+                log.warning("Stale/insufficient candles; entries disabled, exits still checked")
             tick = api("Ticker", {"pair": PAIR})
             ticker = next(iter(tick.values()))
             ask, bid = float(ticker["a"][0]), float(ticker["b"][0])
-            if ask <= 0 or bid <= 0 or (ask - bid) / ask > 0.0015:
-                log.warning("Spread too wide; skip")
+            if not (math.isfinite(ask) and math.isfinite(bid) and ask >= bid > 0):
+                log.warning("Invalid quote; cannot price paper fills")
                 time.sleep(15)
                 continue
+            spread_ok = (ask - bid) / ask <= 0.0015
+            if not spread_ok:
+                log.warning("Spread too wide; entries disabled, exits still checked")
             cash, day, day_start, buys, last_buy, last_candle = db.execute(
                 "SELECT cash,day,day_start,buys,last_buy,last_candle FROM state WHERE id=1"
             ).fetchone()
@@ -260,15 +269,22 @@ def run():
                              ("%.4f EUR" % net_pnl) if net_pnl is not None else "UNKNOWN_LEGACY", equity)
                     closed_any = True
             items = positions(db)
-            candle_time = int(candles[-1][0])
+            candle_time = int(candles[-1][0]) if candles_ok else last_candle
             equity = portfolio_equity(cash, items, bid, ask)
             daily_ok = equity >= day_start * 0.97
             gross = sum(abs(p[1]) * (ask if p[1] < 0 else bid) for p in items)
-            if (not closed_any and daily_ok and len(items) < MAX_OPEN and buys < MAX_DAILY_ENTRIES
+            if (candles_ok and spread_ok and not closed_any and daily_ok
+                    and len(items) < MAX_OPEN and buys < MAX_DAILY_ENTRIES
                     and now - last_buy >= ENTRY_COOLDOWN_SECONDS and candle_time != last_candle):
                 direction = signal(candles)
                 if direction != "WAIT":
-                    regime = market_regime()
+                    try:
+                        regime = market_regime()
+                    except Exception:
+                        # An entry-only data failure must not roll back this cycle's
+                        # accounting, including any earlier position exits.
+                        log.warning("Regime unavailable; entry disabled", exc_info=True)
+                        regime, direction = "UNAVAILABLE", "WAIT"
                     if (direction == "LONG" and regime == "BEAR") or (direction == "SHORT" and regime == "BULL"):
                         log.info("PAPER entry blocked by market regime=%s signal=%s", regime, direction)
                         direction = "WAIT"
