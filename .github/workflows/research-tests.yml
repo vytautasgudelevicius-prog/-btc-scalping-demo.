@@ -5,6 +5,7 @@ on:
       - 'backtest.py'
       - 'test_backtest.py'
       - 'fetch_recent_kraken.py'
+      - 'import_kraken_archive.py'
       - '.github/workflows/research-tests.yml'
   workflow_dispatch:
 jobs:
@@ -17,6 +18,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Syntax check
-        run: python -m py_compile backtest.py test_backtest.py fetch_recent_kraken.py
+        run: python -m py_compile backtest.py test_backtest.py fetch_recent_kraken.py import_kraken_archive.py
       - name: Unit tests
         run: python -m unittest -v test_backtest.py
