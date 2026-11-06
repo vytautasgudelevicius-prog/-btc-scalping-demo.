@@ -1,0 +1,21 @@
+{
+  "train": {
+    "crossovers": 22198,
+    "regime": 6611,
+    "continuous_data": 5285,
+    "hour_range_2_14pct": 110,
+    "directional_hour_trend_0_4pct": 36,
+    "atr_bounds": 36,
+    "volume": 13
+  },
+  "validation": {
+    "crossovers": 11727,
+    "regime": 3672,
+    "continuous_data": 3258,
+    "hour_range_2_14pct": 62,
+    "directional_hour_trend_0_4pct": 24,
+    "atr_bounds": 24,
+    "volume": 10
+  },
+  "limitations": "Sequential counts depend on gate order; candidates are not trades. Portfolio, cooldown, daily limits and execution are excluded. No parameter tuning or holdout evaluation."
+}
