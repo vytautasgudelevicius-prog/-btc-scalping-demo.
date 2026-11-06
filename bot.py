@@ -58,9 +58,9 @@ def entry_quality(candles, direction):
     hourly_range = high / low - 1
     # Round-trip fee+slippage alone costs ~1.64% before spread.
     # Require substantially more observed movement before risking a new entry.
-    minimum_range = 2 * (FEE + SLIP) + 0.015
+    minimum_range = 2 * (FEE + SLIP) + 0.005
     trend = close[-1] / close[-61] - 1
-    trend_ok = trend >= 0.008 if direction == "LONG" else trend <= -0.008
+    trend_ok = trend >= 0.004 if direction == "LONG" else trend <= -0.004
     return hourly_range >= minimum_range and trend_ok
 
 def liquidity_and_atr_ok(candles):
@@ -86,13 +86,13 @@ def liquidity_and_atr_ok(candles):
 
 
 def market_regime():
-    """Classify broad BTC trend using completed 4h and daily Kraken candles.
+    """Classify broad BTC trend using completed 4h Kraken candles.
 
     Conservative by design: insufficient/stale/ambiguous data => SIDEWAYS.
     This is a risk gate, not a prediction of future price direction.
     """
     series = []
-    for interval, max_age in ((240, 8 * 3600), (1440, 2 * 86400)):
+    for interval, max_age in ((240, 8 * 3600),):
         data = api("OHLC", {"pair": PAIR, "interval": interval})
         key = next(k for k in data if k != "last")
         candles = data[key][:-1]
@@ -107,7 +107,7 @@ def market_regime():
         series.append("BULL" if last > e50 > e200 * 1.005
                       else "BEAR" if last < e50 < e200 * 0.995
                       else "SIDEWAYS")
-    return series[0] if series[0] == series[1] else "SIDEWAYS"
+    return series[0] if series else "SIDEWAYS"
 
 
 def marked_equity(cash, btc, bid, ask):
@@ -183,7 +183,7 @@ def run():
             candle_time = int(candles[-1][0])
             # A position cannot be reversed in the same polling cycle.
             daily_ok = marked_equity(cash, btc, bid, ask) >= day_start * 0.97
-            if btc == 0 and exit_reason is None and daily_ok and buys < 4 and now - last_buy >= 3600 and candle_time != last_candle:
+            if btc == 0 and exit_reason is None and daily_ok and buys < 8 and now - last_buy >= 900 and candle_time != last_candle:
                 direction = signal(candles)
                 regime = market_regime() if direction != "WAIT" else "SIDEWAYS"
                 if (direction == "LONG" and regime != "BULL") or (direction == "SHORT" and regime != "BEAR"):
@@ -202,7 +202,7 @@ def run():
                     last_buy = now
                     trade(db, "BUY_LONG", amount, price, fee, "ema9_21", marked_equity(cash, btc, bid, ask))
                     log.info("PAPER OPEN LONG %.8f BTC @ %.2f", btc, price)
-                elif direction == "SHORT" and entry_quality(candles, direction) and budget > 5:
+                elif direction == "SHORT" and entry_quality(candles, direction) and liquidity_and_atr_ok(candles) and budget > 5:
                     price = bid * (1 - SLIP)
                     amount = budget / price
                     fee = amount * price * FEE
