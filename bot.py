@@ -63,6 +63,28 @@ def entry_quality(candles, direction):
     trend_ok = trend >= 0.008 if direction == "LONG" else trend <= -0.008
     return hourly_range >= minimum_range and trend_ok
 
+def liquidity_and_atr_ok(candles):
+    """Require meaningful activity and bounded volatility on completed 1m bars."""
+    if len(candles) < 65:
+        return False
+    recent = candles[-60:]
+    highs = [float(x[2]) for x in recent]
+    lows = [float(x[3]) for x in recent]
+    closes = [float(x[4]) for x in recent]
+    volumes = [float(x[6]) for x in recent]
+    if min(lows) <= 0 or closes[-1] <= 0:
+        return False
+    true_ranges = [max(highs[i] - lows[i],
+                       abs(highs[i] - closes[i-1]),
+                       abs(lows[i] - closes[i-1])) for i in range(1, len(recent))]
+    atr_pct = (sum(true_ranges[-14:]) / 14) / closes[-1]
+    avg_volume = sum(volumes[-31:-1]) / 30
+    # Avoid dead markets and extreme one-minute volatility.
+    return (0.0002 <= atr_pct <= 0.015
+            and avg_volume > 0
+            and volumes[-1] >= 0.5 * avg_volume)
+
+
 def market_regime():
     """Classify broad BTC trend using completed 4h and daily Kraken candles.
 
@@ -170,7 +192,7 @@ def run():
                 # Max 10% of current equity, no leverage; simulated short collateral
                 # is covered by the other 90% of available cash.
                 budget = min(max(0, marked_equity(cash, btc, bid, ask)) * 0.10, cash * 0.10)
-                if direction == "LONG" and entry_quality(candles, direction) and budget > 5:
+                if direction == "LONG" and entry_quality(candles, direction) and liquidity_and_atr_ok(candles) and budget > 5:
                     price = ask * (1 + SLIP)
                     amount = budget / (price * (1 + FEE))
                     fee = amount * price * FEE
