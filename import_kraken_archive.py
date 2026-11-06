@@ -21,12 +21,26 @@ def main():
             writer=csv.writer(dst)
             writer.writerow(("timestamp","open","high","low","close","volume"))
             count=0
+            gaps=0
+            missing_minutes=0
+            previous=None
             for row in reader:
                 if len(row)<7:
                     raise ValueError("Invalid Kraken row")
+                stamp=int(row[0])
+                if previous is not None:
+                    delta=stamp-previous
+                    if delta<=0 or delta%60:
+                        raise ValueError("Non-monotonic or off-minute historical timestamps")
+                    if delta>60:
+                        gaps+=1
+                        missing_minutes+=delta//60-1
+                previous=stamp
                 writer.writerow((row[0],row[1],row[2],row[3],row[4],row[5]))
                 count+=1
-    print(f"Extracted {count} raw BTC/EUR 1m bars. Validate continuity before testing.")
+    print(f"Extracted {count} raw BTC/EUR 1m bars; gaps={gaps}, missing_minutes={missing_minutes}.")
+    if gaps:
+        print("WARNING: Archive contains gaps. backtest.py rejects nonconsecutive candles; do not invent missing prices.")
 
 if __name__=="__main__":
     main()
