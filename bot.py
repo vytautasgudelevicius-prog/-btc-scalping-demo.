@@ -280,13 +280,15 @@ def run():
                              max(0, equity * MAX_GROSS_EXPOSURE - gross),
                              max(0, cash) * 0.10)
                 if direction in ("LONG", "SHORT"):
-                    quality_ok = entry_quality(candles, direction)
-                    liquidity_ok = liquidity_and_atr_ok(candles)
-                    if budget <= 5 or not quality_ok or not liquidity_ok:
-                        log.info("PAPER signal rejected direction=%s budget=%.2f quality_ok=%s liquidity_atr_ok=%s",
-                                 direction, budget, quality_ok, liquidity_ok)
-                if (direction in ("LONG", "SHORT") and budget > 5
-                        and quality_ok and liquidity_ok):
+                    # Active PAPER experiment: the former quality and ATR/volume
+                    # gates rejected nearly every EMA crossover. Keep the hard
+                    # spread, stale-data, exposure and daily-loss guards above.
+                    # Do not claim this filter change improves profitability.
+                    quality_ok = True
+                    liquidity_ok = True
+                    if budget <= 5:
+                        log.info("PAPER signal rejected direction=%s budget=%.2f", direction, budget)
+                if direction in ("LONG", "SHORT") and budget > 5:
                     if direction == "LONG":
                         price = ask * (1 + SLIP)
                         amount = budget / (price * (1 + FEE))
