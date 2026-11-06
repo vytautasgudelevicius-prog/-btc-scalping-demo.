@@ -63,6 +63,31 @@ def entry_quality(candles, direction):
     trend_ok = trend >= 0.008 if direction == "LONG" else trend <= -0.008
     return hourly_range >= minimum_range and trend_ok
 
+def market_regime():
+    """Classify broad BTC trend using completed 4h and daily Kraken candles.
+
+    Conservative by design: insufficient/stale/ambiguous data => SIDEWAYS.
+    This is a risk gate, not a prediction of future price direction.
+    """
+    series = []
+    for interval, max_age in ((240, 8 * 3600), (1440, 2 * 86400)):
+        data = api("OHLC", {"pair": PAIR, "interval": interval})
+        key = next(k for k in data if k != "last")
+        candles = data[key][:-1]
+        if len(candles) < 210 or int(time.time()) - int(candles[-1][0]) > max_age:
+            return "SIDEWAYS"
+        closes = [float(x[4]) for x in candles]
+        e50 = ema(closes, 50)[-1]
+        e200 = ema(closes, 200)[-1]
+        last = closes[-1]
+        if e50 <= 0 or e200 <= 0:
+            return "SIDEWAYS"
+        series.append("BULL" if last > e50 > e200 * 1.005
+                      else "BEAR" if last < e50 < e200 * 0.995
+                      else "SIDEWAYS")
+    return series[0] if series[0] == series[1] else "SIDEWAYS"
+
+
 def marked_equity(cash, btc, bid, ask):
     """Conservative close-out valuation including simulated taker fee/slippage."""
     if btc > 0:
@@ -138,6 +163,10 @@ def run():
             daily_ok = marked_equity(cash, btc, bid, ask) >= day_start * 0.97
             if btc == 0 and exit_reason is None and daily_ok and buys < 4 and now - last_buy >= 3600 and candle_time != last_candle:
                 direction = signal(candles)
+                regime = market_regime() if direction != "WAIT" else "SIDEWAYS"
+                if (direction == "LONG" and regime != "BULL") or (direction == "SHORT" and regime != "BEAR"):
+                    log.info("PAPER entry blocked by market regime=%s signal=%s", regime, direction)
+                    direction = "WAIT"
                 # Max 10% of current equity, no leverage; simulated short collateral
                 # is covered by the other 90% of available cash.
                 budget = min(max(0, marked_equity(cash, btc, bid, ask)) * 0.10, cash * 0.10)
