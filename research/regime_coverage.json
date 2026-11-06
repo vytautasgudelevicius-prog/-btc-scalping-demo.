@@ -1,0 +1,14 @@
+{
+  "-1.0": {
+    "candles": 285188,
+    "ema_crossovers": 12707
+  },
+  "0.0": {
+    "candles": 418907,
+    "ema_crossovers": 18284
+  },
+  "1.0": {
+    "candles": 339717,
+    "ema_crossovers": 14886
+  }
+}

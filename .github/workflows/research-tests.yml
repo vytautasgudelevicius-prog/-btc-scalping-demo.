@@ -2,11 +2,15 @@ name: Research backtest checks
 on:
   push:
     paths:
+      - 'bot.py'
+      - 'research/**'
+      - 'test_*.py'
       - 'backtest.py'
       - 'test_backtest.py'
       - 'fetch_recent_kraken.py'
       - 'import_kraken_archive.py'
       - '.github/workflows/research-tests.yml'
+  pull_request:
   workflow_dispatch:
 jobs:
   test:
@@ -17,7 +21,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Research dependencies
+        run: pip install -r research/requirements.txt
       - name: Syntax check
-        run: python -m py_compile backtest.py test_backtest.py fetch_recent_kraken.py import_kraken_archive.py
+        run: python -m py_compile bot.py backtest.py test_backtest.py test_research.py fetch_recent_kraken.py import_kraken_archive.py research/study.py research/download_kraken.py
       - name: Unit tests
-        run: python -m unittest -v test_backtest.py
+        run: python -m unittest discover -v
