@@ -31,11 +31,28 @@ def observe(fetch=api):
     quality=entry_quality(candles,direction)
     liquid=liquidity_and_atr_ok(candles)
     context_ok=spread_pct<=0.15 and quality and liquid
+    highs=[float(x[2]) for x in candles[-60:]]
+    lows=[float(x[3]) for x in candles[-60:]]
+    closes=[float(x[4]) for x in candles]
+    hourly_range_pct=(max(highs)/min(lows)-1)*100
+    trend_pct=(closes[-1]/closes[-61]-1)*100
+    required_range_pct=(2*(FEE+SLIP)+0.002)*100
+    rejection_reasons=[]
+    if direction=="WAIT": rejection_reasons.append("NO_EMA_CROSS")
+    if hourly_range_pct<required_range_pct: rejection_reasons.append("RANGE_BELOW_COST_GATE")
+    if direction=="LONG" and trend_pct<0.2: rejection_reasons.append("TREND_NOT_LONG")
+    if direction=="SHORT" and trend_pct>-0.2: rejection_reasons.append("TREND_NOT_SHORT")
+    if not liquid: rejection_reasons.append("LIQUIDITY_OR_ATR")
+    if spread_pct>0.15: rejection_reasons.append("SPREAD")
     return {"timestamp_utc":datetime.now(timezone.utc).isoformat(),
             "last_completed_candle":datetime.fromtimestamp(int(candles[-1][0]),timezone.utc).isoformat(),
             "pair":"BTC/EUR","bid":bid,"ask":ask,
             "spread_pct":round(spread_pct,5),
             "estimated_roundtrip_cost_pct":round(cost_pct,5),
+            "hourly_range_pct":round(hourly_range_pct,4),
+            "required_range_pct":round(required_range_pct,4),
+            "hourly_trend_pct":round(trend_pct,4),
+            "rejection_reasons":rejection_reasons,
             "ema_signal":direction,"quality_filter":quality,
             "liquidity_atr_filter":liquid,
             "context_candidate":bool(direction!="WAIT" and context_ok),
