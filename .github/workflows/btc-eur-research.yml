@@ -135,7 +135,18 @@ jobs:
               lines += [f"**Verdict: {verdict}**", ""]
           else:
               lines += ["**Verdict: DO NOT DEPLOY; cost-aware test missing.**", ""]
-          lines += ["Direction accuracy alone is not trading profitability. Historical Binance proxy data are not Kraken execution fills."]
+          lines += ["## Walk-forward forecast after modeled trading costs", ""]
+          for symbol, name in (("BTC/EUR","btc_walk_forward"),("ETH/EUR","eth_walk_forward"),("SOL/EUR","sol_walk_forward")):
+              report = load(name)
+              if not report:
+                  lines += [f"- {symbol}: MISSING REPORT — do not deploy"]
+                  continue
+              lines += [f"- {symbol}: **{report.get('decision','NO_TRADE')}**; assumed round-trip cost {report.get('cost_roundtrip_pct')}%"]
+              for fold in report.get("folds",[]):
+                  holdout = fold.get("test",{})
+                  lines += [f"  - Fold {fold['fold']}: {fold.get('decision','NO_TRADE')}; {holdout.get('trades',0)} test trades; average net {holdout.get('avg_net_pct')}%"]
+          lines += ["", "**Railway deployment: NOT AUTHORIZED by this workflow.**",
+                    "Direction accuracy alone is not trading profitability. Historical Binance proxy data are not Kraken execution fills."]
           out.write_text("\n".join(lines), encoding="utf-8")
           print("\n".join(lines))
           PY
