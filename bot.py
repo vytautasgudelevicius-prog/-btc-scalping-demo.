@@ -186,6 +186,28 @@ def trade_statistics(db, current_equity):
 def trade(db, side, amount, price, fee, reason, equity):
     db.execute("INSERT INTO trades VALUES (?,?,?,?,?,?,?)", (dt.datetime.now(dt.timezone.utc).isoformat(), side, amount, price, fee, reason, equity))
 
+def research_entry_gate(direction, candles, equity, bid, ask, day_start, loss_count):
+    """Research model is not validated for deployment: reject new entries.
+
+    Preserves legacy position exit processing. Never infer authorization from a
+    green CI check or a profitable-looking historical result.
+    """
+    from research.paper_promotion_gate import paper_candidate
+    if direction not in ("LONG", "SHORT") or not candles:
+        return {"decision": "WAIT", "reason": "no_direction_or_candles"}
+    entry = ask * (1 + SLIP) if direction == "LONG" else bid * (1 - SLIP)
+    stop = entry * (0.988 if direction == "LONG" else 1.012)
+    target = entry * (1.03 if direction == "LONG" else .97)
+    # No independently verified live forecast or walk-forward promotion yet.
+    return paper_candidate(
+        forecast_return=0.0, expected_price=entry, entry=entry,
+        equity=equity, stop=stop, target=target,
+        validated=False, walk_forward_passed=False,
+        day_start_equity=day_start, consecutive_losses=loss_count,
+        fee_per_side=FEE, spread_bps=max(0.0, (ask-bid)/ask*10000),
+        slippage_bps=SLIP*10000)
+
+
 def run():
     import pathlib
     pathlib.Path(DB).parent.mkdir(parents=True, exist_ok=True)
@@ -304,14 +326,18 @@ def run():
                              max(0, equity * MAX_GROSS_EXPOSURE - gross),
                              max(0, cash) * 0.10)
                 if direction in ("LONG", "SHORT"):
-                    # Active PAPER experiment: the former quality and ATR/volume
-                    # gates rejected nearly every EMA crossover. Keep the hard
-                    # spread, stale-data, exposure and daily-loss guards above.
-                    # Do not claim this filter change improves profitability.
-                    quality_ok = True
-                    liquidity_ok = True
+                    # Research promotion is fail-closed until forward results and
+                    # costs are independently verified. Do not bypass filters.
+                    gate = research_entry_gate(direction, candles, equity, bid, ask,
+                                               day_start, sum(pnl < 0 for pnl in recent_results))
+                    if gate["decision"] != "PAPER_RESEARCH_CANDIDATE":
+                        log.info("PAPER entry blocked by research gate: %s", gate["reason"])
+                        direction = "WAIT"
+                    elif not entry_quality(candles, direction) or not liquidity_and_atr_ok(candles):
+                        log.info("PAPER entry blocked by quality/liquidity gate")
+                        direction = "WAIT"
                     if budget <= 5:
-                        log.info("PAPER signal rejected direction=%s budget=%.2f", direction, budget)
+                        log.info("PAPER signal rejected: budget=%.2f", budget)
                 if direction in ("LONG", "SHORT") and budget > 5:
                     if direction == "LONG":
                         price = ask * (1 + SLIP)
