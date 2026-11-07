@@ -137,3 +137,42 @@ def price_action_context(rows, lookback=20):
     return {"pattern": pattern, "location": location,
             "confirmation": confirmation, "signal": "WAIT",
             "support": support, "resistance": resistance}
+
+
+def next_candle_bias(rows):
+    """Explain a directional hypothesis for the NEXT completed 5m candle.
+
+    Not a calibrated probability and never an order. Only completed 1m rows
+    ending at a 5m boundary may be used.
+    """
+    if len(rows) < 240:
+        return {"direction": "WAIT", "confidence": "UNVALIDATED",
+                "reason": "insufficient_history"}
+    minute = int(rows[-1][0].timestamp()) // 60
+    if minute % 5 != 4:
+        return {"direction": "WAIT", "confidence": "UNVALIDATED",
+                "reason": "incomplete_5m_boundary"}
+    m5 = aggregate(rows[-240:], 5)
+    m15 = aggregate(rows[-240:], 15)
+    if len(m5) < 22 or len(m15) < 8:
+        return {"direction": "WAIT", "confidence": "UNVALIDATED",
+                "reason": "incomplete_history"}
+    context = price_action_context(m5)
+    atr = atr_pct(m5)
+    if atr is None or not .0005 <= atr <= .02:
+        return {"direction": "WAIT", "confidence": "UNVALIDATED",
+                "reason": "volatility_filter"}
+    trend = m15[-1][4] / m15[-8][4] - 1
+    vol_baseline = mean(r[5] for r in m5[-21:-1])
+    if vol_baseline <= 0 or m5[-1][5] < 1.2 * vol_baseline:
+        return {"direction": "WAIT", "confidence": "UNVALIDATED",
+                "reason": "weak_volume"}
+    if context["confirmation"] and context["location"] == "ABOVE_RESISTANCE" and trend > .003:
+        direction = "UP"
+    elif context["confirmation"] and context["location"] == "BELOW_SUPPORT" and trend < -.003:
+        direction = "DOWN"
+    else:
+        direction = "WAIT"
+    return {"direction": direction, "confidence": "UNVALIDATED",
+            "reason": "confirmed_breakout_with_trend" if direction != "WAIT" else "no_edge",
+            "context": context["location"]}
