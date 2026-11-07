@@ -11,6 +11,10 @@ RISK=0.005
 DAILY_LIMIT=0.02
 STOP_PCT=0.01
 MAX_HOLD=300
+# Experimental paper-only trend entry; production signal remains unchanged.
+MIN_HOURLY_TREND_PCT=0.15
+MIN_HOURLY_RANGE_PCT=0.25
+MAX_SPREAD_PCT=0.05
 
 def init(db):
     db.execute("""CREATE TABLE IF NOT EXISTS trades(
@@ -55,9 +59,12 @@ def tick(db,report):
             put(db,"equity",equity)
             event="CLOSED"
     else:
-        direction=report["ema_signal"]
-        eligible=(report["context_candidate"] and report["quality_filter"] and
-                  report["liquidity_atr_filter"] and direction in ("LONG","SHORT"))
+        # Forward-only experiment: sustained hourly momentum and a spread gate.
+        trend=float(report.get("hourly_trend_pct",0))
+        hourly_range=float(report.get("hourly_range_pct",0))
+        direction="LONG" if trend>=MIN_HOURLY_TREND_PCT else ("SHORT" if trend<=-MIN_HOURLY_TREND_PCT else "WAIT")
+        eligible=(direction!="WAIT" and hourly_range>=MIN_HOURLY_RANGE_PCT
+                  and report["spread_pct"]<=MAX_SPREAD_PCT)
         halted=equity<=day_start*(1-DAILY_LIMIT)
         if eligible and not halted and equity>0:
             entry=ask*(1+SLIP) if direction=="LONG" else bid*(1-SLIP)
