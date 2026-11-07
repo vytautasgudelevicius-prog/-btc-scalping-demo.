@@ -14,7 +14,7 @@ class CurriculumTests(unittest.TestCase):
     def test_flat_market_waits(self):
         report=trading_lesson_report(candles())
         self.assertEqual(report["decision"],"WAIT")
-        self.assertEqual(report["reason"],"no_confirmed_breakout")
+        self.assertEqual(report["reason"],"insufficient_volume")
 
     def test_costs_can_invalidate_trade(self):
         report=trading_lesson_report(candles(),target_pct=.001)
