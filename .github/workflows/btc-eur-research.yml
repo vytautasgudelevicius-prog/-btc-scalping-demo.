@@ -24,6 +24,7 @@ on:
       - 'test_leverage_simulator.py'
       - 'research/technical_analysis_engine.py'
       - 'test_technical_analysis_engine.py'
+      - 'research/compare_market_forecasts.py'
       - 'research/forecast_expected_value.py'
       - 'test_forecast_expected_value.py'
       - 'test_auto_optimize.py'
@@ -75,11 +76,13 @@ jobs:
         run: python research/fee_sensitivity.py research/history_btceur_proxy.csv > fee_sensitivity.json
       - name: Forecast next BTC 5m return and evaluate expected net edge
         run: python research/forecast_expected_value.py research/history_btceur_proxy.csv > forecast_expected_value.json
+      - name: Compare BTC ETH SOL forecast profitability after costs
+        run: python research/compare_market_forecasts.py BTC/EUR research/history_btceur_proxy.csv ETH/EUR research/history_etheur_proxy.csv SOL/EUR research/history_soleur_proxy.csv > market_forecasts.json
       - name: Print result summaries
         run: |
           python - <<'PY'
           import json
-          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'auto_optimize', 'fee_sensitivity', 'forecast_expected_value'):
+          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'auto_optimize', 'fee_sensitivity', 'forecast_expected_value', 'market_forecasts'):
               data=json.load(open(name+'.json'))
               print(name, json.dumps(data, indent=2)[:14000])
           PY
@@ -140,4 +143,5 @@ jobs:
             auto_optimize.json
             fee_sensitivity.json
             forecast_expected_value.json
+            market_forecasts.json
           if-no-files-found: warn
