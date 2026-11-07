@@ -102,3 +102,38 @@ def research_signal(rows):
     if direction == "DOWN" and trend < -.003 and shape["bearish"] and shape["close_location"] < .25:
         return {"signal": "SHORT", "reason": "trend_volume_breakout"}
     return {"signal": "WAIT", "reason": "no_confirmation"}
+
+
+def price_action_context(rows, lookback=20):
+    """Describe completed candles in context; never return a standalone trade order."""
+    if len(rows) < lookback + 2:
+        return {"pattern": "INSUFFICIENT_DATA", "location": "UNKNOWN",
+                "confirmation": False, "signal": "WAIT"}
+    previous = rows[-lookback-1:-1]
+    last = rows[-1]
+    features = candle_features(last)
+    span = last[2] - last[3]
+    support = min(r[3] for r in previous)
+    resistance = max(r[2] for r in previous)
+    pattern = "NONE"
+    if span > 0 and features["lower_wick_ratio"] >= .55 and features["body_ratio"] <= .35:
+        pattern = "LOWER_REJECTION"
+    elif span > 0 and features["upper_wick_ratio"] >= .55 and features["body_ratio"] <= .35:
+        pattern = "UPPER_REJECTION"
+    elif features["body_ratio"] <= .10:
+        pattern = "DOJI"
+    else:
+        engulf = engulfing(rows[-2], last)
+        if engulf != "NONE":
+            pattern = engulf + "_ENGULFING"
+    location = ("ABOVE_RESISTANCE" if last[4] > resistance else
+                "BELOW_SUPPORT" if last[4] < support else "INSIDE_RANGE")
+    # No pattern alone triggers an order: breakout requires a completed close
+    # outside the prior range and a directional candle body.
+    confirmation = ((location == "ABOVE_RESISTANCE" and features["bullish"] and
+                     features["close_location"] >= .75) or
+                    (location == "BELOW_SUPPORT" and features["bearish"] and
+                     features["close_location"] <= .25))
+    return {"pattern": pattern, "location": location,
+            "confirmation": confirmation, "signal": "WAIT",
+            "support": support, "resistance": resistance}
