@@ -22,17 +22,16 @@ def evaluate(btc_rows, other_markets):
         raise ValueError("Supply at least one independent training market")
     pooled = list(btc_train)
     market_counts = {}
-    # Align training to BTC's earliest 60% period, excluding all observations
-    # at or after the BTC validation period. Requires timestamped samples;
-    # the existing examples() API does not expose timestamps, so we instead
-    # enforce per-market chronological 60% splits and report this limitation.
+    # Anchor all external training to the BTC train/validation calendar boundary.
+    # The BTC dataset is required to be contiguous and UTC aligned.
+    btc_cutoff = btc_rows[239 + 5*a][0]
     for name, rows in other_markets.items():
-        sample = examples(rows)
+        eligible_rows = [row for row in rows if row[0] < btc_cutoff]
+        sample = examples(eligible_rows)
         if len(sample) < 500:
-            raise ValueError(f"{name}: fewer than 500 labeled candles")
-        cutoff = int(len(sample)*.6)
-        pooled.extend(sample[:cutoff])
-        market_counts[name] = cutoff
+            raise ValueError(f"{name}: fewer than 500 eligible training candles")
+        pooled.extend(sample)
+        market_counts[name] = len(sample)
     baseline = fit(btc_train)
     transfer = fit(pooled)
     thresholds = (.5,.55,.6,.65,.7,.75)
@@ -45,7 +44,7 @@ def evaluate(btc_rows, other_markets):
         "btc_only": {"threshold":base_t,"validation":score(baseline,validation,base_t),"test":score(baseline,test,base_t)},
         "multi_market": {"threshold":trans_t,"validation":score(transfer,validation,trans_t),"test":score(transfer,test,trans_t)},
         "training_samples": {"btc":len(btc_train),**market_counts},
-        "warning": "Research only; each market is split chronologically but cross-market calendar cutoffs are not synchronized. Directional accuracy excludes fees and is not profitability."
+        "warning": "Research only; other-market labels end before BTC validation cutoff. Directional accuracy excludes fees and is not profitability."
     }
 
 if __name__=="__main__":
