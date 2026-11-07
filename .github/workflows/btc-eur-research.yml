@@ -19,6 +19,7 @@ on:
       - 'research/extra_strategies.py'
       - 'test_strategy_arena.py'
       - 'research/auto_optimize.py'
+      - 'research/fee_sensitivity.py'
       - 'test_auto_optimize.py'
       - 'research/fetch_multimarket_history.py'
       - 'research/candles.py'
@@ -64,11 +65,13 @@ jobs:
         run: python research/strategy_arena.py research/history_btceur_proxy.csv > strategy_arena.json
       - name: Tune parameters on validation and retest untouched BTC holdout
         run: python research/auto_optimize.py research/history_btceur_proxy.csv > auto_optimize.json
+      - name: Compare hypothetical trading fee scenarios
+        run: python research/fee_sensitivity.py research/history_btceur_proxy.csv > fee_sensitivity.json
       - name: Print result summaries
         run: |
           python - <<'PY'
           import json
-          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'auto_optimize'):
+          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'auto_optimize', 'fee_sensitivity'):
               data=json.load(open(name+'.json'))
               print(name, json.dumps(data, indent=2)[:14000])
           PY
@@ -127,4 +130,5 @@ jobs:
             strategy_comparison.json
             strategy_arena.json
             auto_optimize.json
+            fee_sensitivity.json
           if-no-files-found: warn
