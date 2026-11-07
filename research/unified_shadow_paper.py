@@ -15,13 +15,24 @@ def main():
     with sqlite3.connect(SHADOW,timeout=30) as shadow, sqlite3.connect(PAPER,timeout=30) as paper:
         initialize(shadow)
         paper_init(paper)
+        shadow.execute("CREATE TABLE IF NOT EXISTS rejection_audit (candle TEXT PRIMARY KEY, reasons TEXT NOT NULL, eligible INTEGER NOT NULL)")
+        shadow.commit()
         while True:
             try:
                 report=observe()
+                reasons=report.get("rejection_reasons",[])
+                shadow.execute("INSERT OR IGNORE INTO rejection_audit(candle,reasons,eligible) VALUES(?,?,?)",
+                    (report["last_completed_candle"],json.dumps(reasons),int(report["context_candidate"])))
+                shadow.commit()
+                audit_rows=shadow.execute("SELECT reasons,eligible FROM rejection_audit").fetchall()
+                counts={"candles":len(audit_rows),"eligible":sum(x[1] for x in audit_rows)}
+                for raw,_ in audit_rows:
+                    for reason in json.loads(raw):
+                        counts[reason]=counts.get(reason,0)+1
                 settled=settle(shadow,report)
                 inserted=record(shadow,report)
                 paper_result=paper_tick(paper,report)
-                print(json.dumps({"mode":"UNIFIED_PAPER_ONLY","shadow":{"inserted":inserted,"settled":settled,"latest":report,"summary":summary(shadow)},"paper":paper_result,"real_orders_enabled":False}),flush=True)
+                print(json.dumps({"mode":"UNIFIED_PAPER_ONLY","shadow":{"inserted":inserted,"settled":settled,"latest":report,"summary":summary(shadow)},"paper":paper_result,"rejection_stats":counts,"real_orders_enabled":False}),flush=True)
             except Exception as exc:
                 print(json.dumps({"error":str(exc),"real_orders_enabled":False}),flush=True)
             time.sleep(20)
