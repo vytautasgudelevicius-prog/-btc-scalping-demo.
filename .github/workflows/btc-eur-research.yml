@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Verify candle tests
-        run: python -m unittest test_candles -v
+        run: python -m unittest test_candles test_candle_backtest -v
       - name: Download BTC EUR 1m public historical proxy
         run: python research/fetch_proxy_history.py
       - name: Run baseline EMA strategy
