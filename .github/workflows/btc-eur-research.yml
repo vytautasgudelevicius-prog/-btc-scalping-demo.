@@ -4,6 +4,10 @@ on:
     paths:
       - 'research/fetch_proxy_history.py'
       - 'research/backtest_candles.py'
+      - 'research/evaluate_next_candle.py'
+      - 'research/candles.py'
+      - 'test_candles.py'
+      - 'test_candle_backtest.py'
       - '.github/workflows/btc-eur-research.yml'
   workflow_dispatch:
 jobs:
@@ -25,11 +29,13 @@ jobs:
         run: python backtest.py research/history_btceur_proxy.csv > baseline.json
       - name: Run candle strategy
         run: python research/backtest_candles.py research/history_btceur_proxy.csv > candles.json
+      - name: Evaluate next 5m candle direction on holdout
+        run: python research/evaluate_next_candle.py research/history_btceur_proxy.csv > next_candle.json
       - name: Print result summaries
         run: |
           python - <<'PY'
           import json
-          for name in ('baseline', 'candles'):
+          for name in ('baseline', 'candles', 'next_candle'):
               data=json.load(open(name+'.json'))
               print(name, json.dumps(data, indent=2)[:14000])
           PY
@@ -40,4 +46,5 @@ jobs:
           path: |
             baseline.json
             candles.json
+            next_candle.json
           if-no-files-found: warn
