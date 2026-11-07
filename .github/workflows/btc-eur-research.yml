@@ -55,6 +55,47 @@ jobs:
               data=json.load(open(name+'.json'))
               print(name, json.dumps(data, indent=2)[:14000])
           PY
+      - name: Publish research verdict to GitHub run summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          out = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          lines = ["# BTC/EUR research verdict", "",
+                   "Research only. No real trades, no DEMO strategy deployment.", ""]
+          def load(name):
+              path = Path(name + ".json")
+              return json.loads(path.read_text()) if path.exists() else None
+          transfer = load("transfer_comparison")
+          if transfer:
+              btc = transfer["btc_only"]["test"]
+              multi = transfer["multi_market"]["test"]
+              lines += ["## Unseen BTC directional test",
+                        f"- BTC-only accuracy: {btc['accuracy_pct']}% ({btc['signals']} signals)",
+                        f"- BTC + ETH + SOL accuracy: {multi['accuracy_pct']}% ({multi['signals']} signals)", ""]
+          else:
+              lines += ["- Multi-market comparison unavailable (check failed step).", ""]
+          edge = load("cost_edge")
+          if edge and edge.get("test"):
+              test = edge["test"]
+              avg = test.get("avg_net_return_pct")
+              trades = test.get("trades", 0)
+              lines += ["## Five-minute strategy after costs",
+                        f"- Untouched BTC test trades: {trades}",
+                        f"- Average net return per unit-notional trade: {avg}%",
+                        f"- Round-trip cost: {test.get('cost_roundtrip_pct')}%", ""]
+              if trades < 30 or avg is None or avg <= 0:
+                  verdict = "DO NOT DEPLOY: no demonstrated positive net edge"
+              else:
+                  verdict = "RESEARCH ONLY: positive sample, but not yet robust enough to deploy"
+              lines += [f"**Verdict: {verdict}**", ""]
+          else:
+              lines += ["**Verdict: DO NOT DEPLOY; cost-aware test missing.**", ""]
+          lines += ["Direction accuracy alone is not trading profitability. Historical Binance proxy data are not Kraken execution fills."]
+          out.write_text("\n".join(lines), encoding="utf-8")
+          print("\n".join(lines))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
