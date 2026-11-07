@@ -19,11 +19,11 @@ def walk_forward(rows, fee_per_side=.008,spread_bps=5,slippage_bps=2,folds=3):
         raise ValueError("Need at least 900 aligned labeled 5m candles")
     data=[(x,ret) for (x,_),(_,ret) in zip(xs,rets)]
     n=len(data);cost=2*fee_per_side+(spread_bps+2*slippage_bps)/10000
-    start=n//2;step=(n-start)//(folds+1)
+    start=n//2;step=(n-start)//(2*folds)
     if step<30:raise ValueError("Insufficient data per fold")
     reports=[]
     for fold in range(folds):
-        train_end=start+fold*step
+        train_end=start+2*fold*step
         validation_end=train_end+step
         test_end=min(n,validation_end+step)
         model=fit_ridge(data[:train_end])
@@ -40,6 +40,8 @@ def walk_forward(rows, fee_per_side=.008,spread_bps=5,slippage_bps=2,folds=3):
         _,threshold,valid=max(candidates,key=lambda item:item[0])
         holdout=assess(model,data[validation_end:test_end],threshold,cost)
         reports.append({"fold":fold+1,"train_samples":train_end,
+                        "validation_range":[train_end,validation_end],
+                        "test_range":[validation_end,test_end],
                         "validation":valid,"test":holdout,
                         "threshold_pct":round(threshold*100,5),
                         "decision":"RESEARCH_ONLY" if valid["avg_net_pct"]>0 and
