@@ -22,6 +22,8 @@ on:
       - 'research/fee_sensitivity.py'
       - 'research/leverage_simulator.py'
       - 'test_leverage_simulator.py'
+      - 'research/technical_analysis_engine.py'
+      - 'test_technical_analysis_engine.py'
       - 'test_auto_optimize.py'
       - 'research/fetch_multimarket_history.py'
       - 'research/candles.py'
@@ -44,7 +46,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Verify candle tests
-        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena test_auto_optimize test_leverage_simulator -v
+        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena test_auto_optimize test_leverage_simulator test_technical_analysis_engine -v
       - name: Download BTC EUR 1m public historical proxy
         run: python research/fetch_proxy_history.py
       - name: Download ETH and SOL historical proxy data
