@@ -1,0 +1,43 @@
+name: BTC EUR historical research
+on:
+  push:
+    paths:
+      - 'research/fetch_proxy_history.py'
+      - 'research/backtest_candles.py'
+      - '.github/workflows/btc-eur-research.yml'
+  workflow_dispatch:
+jobs:
+  historical-backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify candle tests
+        run: python -m unittest test_candles -v
+      - name: Download BTC EUR 1m public historical proxy
+        run: python research/fetch_proxy_history.py
+      - name: Run baseline EMA strategy
+        run: python backtest.py research/history_btceur_proxy.csv > baseline.json
+      - name: Run candle strategy
+        run: python research/backtest_candles.py research/history_btceur_proxy.csv > candles.json
+      - name: Print result summaries
+        run: |
+          python - <<'PY'
+          import json
+          for name in ('baseline', 'candles'):
+              data=json.load(open(name+'.json'))
+              print(name, json.dumps(data, indent=2)[:14000])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-eur-research-results
+          path: |
+            baseline.json
+            candles.json
+          if-no-files-found: warn
