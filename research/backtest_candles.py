@@ -38,7 +38,7 @@ def simulate(rows, start_index, fee=FEE, spread_bps=SPREAD_BPS):
             target = entry * (1 + side * TARGET_PCT)
             stop_hit = current[3] <= stop if side == 1 else current[2] >= stop
             target_hit = current[2] >= target if side == 1 else current[3] <= target
-            exit_mid = stop if stop_hit else (target if target_hit else None)
+            # A gap beyond the stop cannot fill at the more favorable stop price.\n            gap_open = current[1]\n            if stop_hit:\n                exit_mid = min(stop, gap_open) if side == 1 else max(stop, gap_open)\n            elif target_hit:\n                exit_mid = target\n            else:\n                exit_mid = None
             if exit_mid is None and i - opened >= MAX_HOLD_MINUTES:
                 exit_mid = nxt[1]
             if exit_mid is not None:
