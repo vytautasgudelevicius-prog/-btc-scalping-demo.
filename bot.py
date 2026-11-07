@@ -271,7 +271,15 @@ def run():
             items = positions(db)
             candle_time = int(candles[-1][0]) if candles_ok else last_candle
             equity = portfolio_equity(cash, items, bid, ask)
-            daily_ok = equity >= day_start * 0.97
+            # Halt new entries after five consecutive losing closes, even across UTC days.
+            recent_results = [r[0] for r in db.execute(
+                "SELECT net_pnl FROM closed_positions WHERE net_pnl IS NOT NULL ORDER BY closed DESC LIMIT 5")]
+            loss_streak_block = (len(recent_results) == 5 and all(pnl < 0 for pnl in recent_results))
+            daily_ok = day_start > 0 and equity >= day_start * 0.97 and not loss_streak_block
+            if loss_streak_block:
+                log.warning("PAPER ENTRY HALTED: five consecutive losses; exits remain active")
+            elif equity < day_start * 0.97:
+                log.warning("PAPER ENTRY HALTED: UTC-day loss limit; exits remain active")
             gross = sum(abs(p[1]) * (ask if p[1] < 0 else bid) for p in items)
             if (candles_ok and spread_ok and not closed_any and daily_ok
                     and len(items) < MAX_OPEN and buys < MAX_DAILY_ENTRIES
