@@ -6,6 +6,7 @@ from pathlib import Path
 from research.kraken_shadow_observer import observe
 from research.kraken_shadow_forward import initialize, settle, record, summary
 from research.isolated_paper_experiment import init as paper_init, tick as paper_tick
+from research.cost_sensitivity import analyze as analyze_costs
 
 SHADOW="/data/kraken_shadow.sqlite3"
 PAPER="/data/experiment.sqlite3"
@@ -41,7 +42,7 @@ def main():
                 from collections import Counter
                 counts=Counter(reason for encoded,_ in rows for reason in json.loads(encoded))
                 diagnostics={"completed_candles":len(rows),"eligible":sum(eligible for _,eligible in rows),"rejections":dict(counts)}
-                print(json.dumps({"mode":"UNIFIED_PAPER_ONLY","shadow":{"inserted":inserted,"settled":settled,"latest":report,"summary":summary(shadow)},"paper":paper_result,"rejection_stats":counts,"real_orders_enabled":False}),flush=True)
+                print(json.dumps({"mode":"UNIFIED_PAPER_ONLY","shadow":{"inserted":inserted,"settled":settled,"latest":report,"summary":summary(shadow)},"paper":paper_result,"rejection_stats":diagnostics,"cost_sensitivity":analyze_costs(shadow),"real_orders_enabled":False}),flush=True)
             except Exception as exc:
                 print(json.dumps({"error":str(exc),"real_orders_enabled":False}),flush=True)
             time.sleep(20)
