@@ -57,11 +57,19 @@ def evaluate(rows):
             candidates.append((result["avg_net_return_pct"],threshold))
     if not candidates:
         return {"decision":"NO_TRADE","reason":"insufficient_validation_signals"}
-    _,selected=max(candidates)
+    best_net, selected = max(candidates)
     valid=simulate(model,samples[a:b],returns[a:b],selected)
     test=simulate(model,samples[b:],returns[b:],selected)
+    if best_net is None or best_net <= 0:
+        decision, reason = "NO_TRADE", "no_positive_validation_edge_after_costs"
+    elif test["trades"] < 30:
+        decision, reason = "NO_TRADE", "insufficient_test_trades"
+    elif test["avg_net_return_pct"] is None or test["avg_net_return_pct"] <= 0:
+        decision, reason = "NO_TRADE", "no_positive_test_edge_after_costs"
+    else:
+        decision, reason = "RESEARCH_ONLY", "positive_historical_edge_requires_robustness_testing"
     return {"selected_threshold":selected,"validation":valid,"test":test,
-            "decision":"RESEARCH_ONLY" if test["trades"]>=30 else "NO_TRADE",
+            "decision":decision,"reason":reason,
             "warning":"No deployment: needs multi-period robustness, realistic fills, and production parity."}
 
 if __name__=="__main__":
