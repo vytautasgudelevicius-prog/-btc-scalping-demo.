@@ -6,6 +6,8 @@ on:
       - 'research/backtest_candles.py'
       - 'research/evaluate_next_candle.py'
       - 'research/train_direction.py'
+      - 'research/train_multimarket.py'
+      - 'research/fetch_multimarket_history.py'
       - 'research/candles.py'
       - 'test_candles.py'
       - 'test_candle_backtest.py'
@@ -29,6 +31,8 @@ jobs:
         run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum -v
       - name: Download BTC EUR 1m public historical proxy
         run: python research/fetch_proxy_history.py
+      - name: Download ETH and SOL historical proxy data
+        run: python research/fetch_multimarket_history.py
       - name: Run baseline EMA strategy
         run: python backtest.py research/history_btceur_proxy.csv > baseline.json
       - name: Run candle strategy
@@ -37,11 +41,13 @@ jobs:
         run: python research/evaluate_next_candle.py research/history_btceur_proxy.csv > next_candle.json
       - name: Train directional model and evaluate untouched test segment
         run: python research/train_direction.py research/history_btceur_proxy.csv > direction_model.json
+      - name: Compare BTC-only vs multi-market training on BTC holdout
+        run: python research/train_multimarket.py research/history_btceur_proxy.csv ETH research/history_etheur_proxy.csv SOL research/history_soleur_proxy.csv > transfer_comparison.json
       - name: Print result summaries
         run: |
           python - <<'PY'
           import json
-          for name in ('baseline', 'candles', 'next_candle', 'direction_model'):
+          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison'):
               data=json.load(open(name+'.json'))
               print(name, json.dumps(data, indent=2)[:14000])
           PY
@@ -54,4 +60,5 @@ jobs:
             candles.json
             next_candle.json
             direction_model.json
+            transfer_comparison.json
           if-no-files-found: warn
