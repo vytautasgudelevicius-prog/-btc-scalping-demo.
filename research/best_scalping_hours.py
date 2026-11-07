@@ -33,8 +33,18 @@ def run(rows,fee_per_side=.008,spread_bps=5,slippage_bps=2,
     xs=examples(rows);returns=labeled_returns(rows)
     if len(xs)!=len(returns) or len(xs)<900:
         raise ValueError("Insufficient aligned 5m samples")
-    # The label starts at the next 5m candle, so attribute it to its ENTRY hour.
-    data=[(x,ret,rows[i+1][0].hour) for (x,_),(i,ret) in zip(xs,returns)]
+    # Reconstruct feature anchor indices exactly as train_direction.examples does.
+    # Never zip 5m examples against 1m row indices: that mislabels entry hours.
+    anchors=[]
+    for i in range(239,len(rows)-5,5):
+        if int(rows[i][0].timestamp())//60 % 5 != 4:
+            continue
+        if rows[i+5][4] == rows[i+1][1]:
+            continue
+        anchors.append(i)
+    if len(anchors)!=len(xs):
+        raise ValueError('Feature-to-hour alignment failed; no trading approval')
+    data=[(x,ret,rows[i+1][0].hour) for (x,_),(_,ret),i in zip(xs,returns,anchors)]
     a,b=int(len(data)*.6),int(len(data)*.8)
     cost=2*fee_per_side+(spread_bps+2*slippage_bps)/10000
     model=fit_ridge([(x,ret) for x,ret,_ in data[:a]])
