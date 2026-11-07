@@ -16,6 +16,7 @@ on:
       - 'research/compare_strategies.py'
       - 'test_compare_strategies.py'
       - 'research/strategy_arena.py'
+      - 'research/extra_strategies.py'
       - 'test_strategy_arena.py'
       - 'research/fetch_multimarket_history.py'
       - 'research/candles.py'
@@ -57,7 +58,7 @@ jobs:
         run: python research/evaluate_cost_edge.py research/history_btceur_proxy.csv > cost_edge.json
       - name: Compare three trading strategies after fees
         run: python research/compare_strategies.py research/history_btceur_proxy.csv > strategy_comparison.json
-      - name: Run six-strategy learning arena and diagnose failures
+      - name: Run twelve-strategy learning arena and diagnose failures
         run: python research/strategy_arena.py research/history_btceur_proxy.csv > strategy_arena.json
       - name: Print result summaries
         run: |
