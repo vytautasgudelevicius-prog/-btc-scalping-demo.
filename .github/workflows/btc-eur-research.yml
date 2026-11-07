@@ -32,6 +32,8 @@ on:
       - 'test_paper_integration.py'
       - 'bot.py'
       - 'test_cross_market_context.py'
+      - 'research/best_scalping_hours.py'
+      - 'test_best_scalping_hours.py'
       - 'research/strong_signal_walk_forward.py'
       - 'test_strong_signal_walk_forward.py'
       - 'research/strong_signal_backtest.py'
@@ -62,7 +64,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Verify candle tests
-        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena test_auto_optimize test_leverage_simulator test_technical_analysis_engine test_forecast_expected_value test_cross_market_context test_research_safety test_paper_integration test_strong_signal_backtest test_strong_signal_walk_forward -v
+        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena test_auto_optimize test_leverage_simulator test_technical_analysis_engine test_forecast_expected_value test_cross_market_context test_research_safety test_paper_integration test_strong_signal_backtest test_strong_signal_walk_forward test_best_scalping_hours -v
       - name: Download BTC EUR 1m public historical proxy
         run: python research/fetch_proxy_history.py
       - name: Download ETH and SOL historical proxy data
@@ -93,6 +95,8 @@ jobs:
         run: python research/strong_signal_backtest.py research/history_btceur_proxy.csv > strong_signal_backtest.json
       - name: Walk-forward test strong BTC signals after costs
         run: python research/strong_signal_walk_forward.py research/history_btceur_proxy.csv > strong_signal_walk_forward.json
+      - name: Find best BTC scalping UTC hours on validation and verify untouched test
+        run: python research/best_scalping_hours.py research/history_btceur_proxy.csv > best_scalping_hours.json
       - name: Compare BTC ETH SOL forecast profitability after costs
         run: python research/compare_market_forecasts.py BTC/EUR research/history_btceur_proxy.csv ETH/EUR research/history_etheur_proxy.csv SOL/EUR research/history_soleur_proxy.csv > market_forecasts.json
       - name: Verify walk-forward BTC ETH SOL price forecasts
@@ -104,7 +108,7 @@ jobs:
         run: |
           python - <<'PY'
           import json
-          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'auto_optimize', 'fee_sensitivity', 'forecast_expected_value', 'strong_signal_backtest', 'strong_signal_walk_forward', 'market_forecasts', 'btc_walk_forward', 'eth_walk_forward', 'sol_walk_forward'):
+          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'auto_optimize', 'fee_sensitivity', 'forecast_expected_value', 'strong_signal_backtest', 'strong_signal_walk_forward', 'best_scalping_hours', 'market_forecasts', 'btc_walk_forward', 'eth_walk_forward', 'sol_walk_forward'):
               data=json.load(open(name+'.json'))
               print(name, json.dumps(data, indent=2)[:14000])
           PY
@@ -163,6 +167,15 @@ jobs:
               lines += [""]
           else:
               lines += ["- Strong-signal walk-forward unavailable — do not deploy", ""]
+          hours = load("best_scalping_hours")
+          if hours:
+              lines += ["## Best BTC scalping UTC hours (holdout after costs)",
+                        f"- Verdict: {hours.get('decision')}",
+                        f"- Selected UTC hours: {hours.get('selected_utc_hours')}",
+                        f"- Validation: {hours.get('validation')}",
+                        f"- Untouched test: {hours.get('untouched_test')}", ""]
+          else:
+              lines += ["- BTC hourly analysis missing — do not deploy", ""]
           lines += ["## Walk-forward forecast after modeled trading costs", ""]
           for symbol, name in (("BTC/EUR","btc_walk_forward"),("ETH/EUR","eth_walk_forward"),("SOL/EUR","sol_walk_forward")):
               report = load(name)
@@ -196,6 +209,7 @@ jobs:
             forecast_expected_value.json
             strong_signal_backtest.json
             strong_signal_walk_forward.json
+            best_scalping_hours.json
             market_forecasts.json
             btc_walk_forward.json
             eth_walk_forward.json
