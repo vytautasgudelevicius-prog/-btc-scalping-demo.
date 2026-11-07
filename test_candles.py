@@ -1,7 +1,7 @@
 """Deterministic tests for research-only candle features."""
 import datetime as dt
 import unittest
-from research.candles import aggregate, atr_pct, breakout, candle_features, engulfing, research_signal
+from research.candles import aggregate, atr_pct, breakout, candle_features, engulfing, research_signal, price_action_context
 
 UTC = dt.timezone.utc
 
@@ -37,6 +37,24 @@ class CandleResearchTests(unittest.TestCase):
 
     def test_wait_without_history(self):
         self.assertEqual(research_signal([bar(i) for i in range(30)])["signal"], "WAIT")
+
+    def test_price_action_requires_context(self):
+        self.assertEqual(price_action_context([bar(0)])["signal"], "WAIT")
+
+    def test_breakout_is_observation_not_order(self):
+        rows = [bar(i) for i in range(21)]
+        rows.append(bar(21, 101, 110, 100, 109))
+        result = price_action_context(rows)
+        self.assertEqual(result["location"], "ABOVE_RESISTANCE")
+        self.assertTrue(result["confirmation"])
+        self.assertEqual(result["signal"], "WAIT")
+
+    def test_lower_rejection_inside_range(self):
+        rows = [bar(i) for i in range(21)]
+        rows.append(bar(21, 100, 102, 90, 101))
+        result = price_action_context(rows)
+        self.assertEqual(result["pattern"], "LOWER_REJECTION")
+        self.assertFalse(result["confirmation"])
 
 if __name__ == "__main__":
     unittest.main()
