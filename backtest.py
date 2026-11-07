@@ -129,7 +129,7 @@ def main():
     if len(sys.argv)!=2:
         raise SystemExit("Usage: python backtest.py historical_1m.csv")
     data=read_csv(sys.argv[1])
-    split=int(len(data)*.7)
+    split=int(len(data)*.60)
     if split<250 or len(data)-split<250:
         raise ValueError("Need >=250 training and >=250 holdout candles")
     # Holdout indicators warm up using earlier candles, but scoring starts at split.
