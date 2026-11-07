@@ -10,6 +10,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from backtest import read_csv
 from research.candles import aggregate
 from research.compare_strategies import signals
+from research.extra_strategies import NAMES, extra_signal
 
 def signal(candles,i,name):
     close=candles[i][4]
@@ -31,9 +32,9 @@ def signal(candles,i,name):
         span=max(c[2] for c in previous)-min(c[3] for c in previous)
         if span<=0:return 0
         return 1 if close>max(c[2] for c in previous)+span*.05 else -1 if close<min(c[3] for c in previous)-span*.05 else 0
-    raise ValueError("unknown strategy")
+    return extra_signal(candles,i,name)
 
-STRATEGIES=("trend","mean_reversion","breakout","momentum","rsi_reversion","volatility_breakout")
+STRATEGIES=("trend","mean_reversion","breakout","momentum","rsi_reversion","volatility_breakout")+NAMES
 
 def evaluate(candles,lo,hi,name,cost):
     trades=[]
