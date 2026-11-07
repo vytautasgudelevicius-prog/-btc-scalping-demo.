@@ -11,7 +11,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SYMBOLS = ("ETHEUR", "SOLEUR")
-MONTHS = ("2026-08", "2026-09", "2026-10")
+def completed_months(now=None, count=3):
+    """Only fully completed UTC months for monthly public archives."""
+    now = now or datetime.now(timezone.utc)
+    year, month = now.year, now.month
+    result = []
+    for _ in range(count):
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+        result.append(f"{year:04d}-{month:02d}")
+    return tuple(reversed(result))
+
+MONTHS = completed_months()
 
 def download(symbol):
     bars = []
