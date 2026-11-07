@@ -24,7 +24,7 @@ def evaluate(btc_rows, other_markets):
     market_counts = {}
     # Anchor all external training to the BTC train/validation calendar boundary.
     # The BTC dataset is required to be contiguous and UTC aligned.
-    btc_cutoff = btc_rows[239 + 5*a][0]
+    btc_boundary_indices = [i for i in range(239, len(btc_rows)-5, 5)\n                            if int(btc_rows[i][0].timestamp()) // 60 % 5 == 4\n                            and btc_rows[i+5][4] != btc_rows[i+1][1]]\n    if len(btc_boundary_indices) != len(btc):\n        raise ValueError("BTC boundary mapping mismatch")\n    btc_cutoff = btc_rows[btc_boundary_indices[a]][0]
     for name, rows in other_markets.items():
         eligible_rows = [row for row in rows if row[0] < btc_cutoff]
         sample = examples(eligible_rows)
