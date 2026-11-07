@@ -11,6 +11,8 @@ from research.strong_signal_walk_forward import run as walk_forward
 from research.best_scalping_hours import run as hourly
 
 def assess(rows):
+    if not rows:
+        raise ValueError("Historical candles required; fail closed")
     observation={"candles":len(rows),"start_utc":rows[0][0].isoformat(),
                  "end_utc":rows[-1][0].isoformat()}
     wf=walk_forward(rows)
@@ -22,12 +24,16 @@ def assess(rows):
     test=hours.get("untouched_test") or {}
     hour_positive=(hours.get("decision")=="RESEARCH_ONLY"
                    and test.get("trades",0)>=15 and (test.get("avg_net_pct") or 0)>0)
-    verified=positive_folds and hour_positive
+    # UTC hour is diagnostic context, never a rigid permission schedule.
+    # Hourly results are not independent evidence: they reuse the same history.
+    verified=positive_folds
     return {
         "market_observation":observation,
         "situation_analysis":{"walk_forward":wf,"utc_hour_analysis":hours},
-        "signal_confirmation":{"historical_edge_verified":verified,
-                               "selected_utc_hours":hours.get("selected_utc_hours",[]) if verified else []},
+        "signal_confirmation":{"walk_forward_candidate":verified,
+                               "historical_edge_verified":False,
+                               "fixed_hour_trading_filter":False,
+                               "hourly_diagnostic_positive":hour_positive},
         "risk_check":{"historical_costs_included":True,
                       "real_time_spread_verified":False,
                       "production_kraken_execution_verified":False,
