@@ -65,7 +65,12 @@ def settle(db, report):
     for candle,timestamp,direction,bid,ask in rows:
         if now-datetime.fromisoformat(timestamp).timestamp()<HORIZON_SECONDS:
             continue
-        # Never pretend an hours-late quote is a five-minute fill.\n        if now-datetime.fromisoformat(timestamp).timestamp()>420:\n            db.execute("UPDATE observations SET settled_timestamp=? WHERE candle=? AND settled_timestamp IS NULL",\n                       (report["timestamp_utc"],candle))\n            continue\n        gross,net=net_return(direction,bid,ask,report["bid"],report["ask"])
+        # Never pretend an hours-late quote is a five-minute fill.
+        if now-datetime.fromisoformat(timestamp).timestamp()>420:
+            db.execute("UPDATE observations SET settled_timestamp=? WHERE candle=? AND settled_timestamp IS NULL",
+                       (report["timestamp_utc"],candle))
+            continue
+        gross,net=net_return(direction,bid,ask,report["bid"],report["ask"])
         db.execute("""UPDATE observations SET settled_timestamp=?,exit_bid=?,exit_ask=?,
             gross_pct=?,net_pct=? WHERE candle=? AND settled_timestamp IS NULL""",
             (report["timestamp_utc"],report["bid"],report["ask"],gross,net,candle))
