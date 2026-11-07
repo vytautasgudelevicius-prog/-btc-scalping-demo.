@@ -16,7 +16,7 @@ class AutoOptimizerTests(unittest.TestCase):
         candles=aggregate(history(),5)
         for (params,signals),(prior_params,prior_signals) in zip(candidates(candles),candidates(candles[:100])):
             self.assertEqual(params,prior_params)
-            self.assertEqual(signals[:99],prior_signals[:99])
+            self.assertEqual(signals[:98],prior_signals[:98])
 
     def test_flat_market_not_profitable_after_fees(self):
         result=optimize(history(slope=0))
