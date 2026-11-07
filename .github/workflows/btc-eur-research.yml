@@ -32,6 +32,8 @@ on:
       - 'test_paper_integration.py'
       - 'bot.py'
       - 'test_cross_market_context.py'
+      - 'research/strong_signal_walk_forward.py'
+      - 'test_strong_signal_walk_forward.py'
       - 'research/strong_signal_backtest.py'
       - 'test_strong_signal_backtest.py'
       - 'research/forecast_expected_value.py'
@@ -60,7 +62,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Verify candle tests
-        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena test_auto_optimize test_leverage_simulator test_technical_analysis_engine test_forecast_expected_value test_cross_market_context test_research_safety test_paper_integration test_strong_signal_backtest -v
+        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena test_auto_optimize test_leverage_simulator test_technical_analysis_engine test_forecast_expected_value test_cross_market_context test_research_safety test_paper_integration test_strong_signal_backtest test_strong_signal_walk_forward -v
       - name: Download BTC EUR 1m public historical proxy
         run: python research/fetch_proxy_history.py
       - name: Download ETH and SOL historical proxy data
@@ -89,6 +91,8 @@ jobs:
         run: python research/forecast_expected_value.py research/history_btceur_proxy.csv > forecast_expected_value.json
       - name: Backtest confirmed BTC strong signals after costs
         run: python research/strong_signal_backtest.py research/history_btceur_proxy.csv > strong_signal_backtest.json
+      - name: Walk-forward test strong BTC signals after costs
+        run: python research/strong_signal_walk_forward.py research/history_btceur_proxy.csv > strong_signal_walk_forward.json
       - name: Compare BTC ETH SOL forecast profitability after costs
         run: python research/compare_market_forecasts.py BTC/EUR research/history_btceur_proxy.csv ETH/EUR research/history_etheur_proxy.csv SOL/EUR research/history_soleur_proxy.csv > market_forecasts.json
       - name: Verify walk-forward BTC ETH SOL price forecasts
@@ -100,7 +104,7 @@ jobs:
         run: |
           python - <<'PY'
           import json
-          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'auto_optimize', 'fee_sensitivity', 'forecast_expected_value', 'strong_signal_backtest', 'market_forecasts', 'btc_walk_forward', 'eth_walk_forward', 'sol_walk_forward'):
+          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'auto_optimize', 'fee_sensitivity', 'forecast_expected_value', 'strong_signal_backtest', 'strong_signal_walk_forward', 'market_forecasts', 'btc_walk_forward', 'eth_walk_forward', 'sol_walk_forward'):
               data=json.load(open(name+'.json'))
               print(name, json.dumps(data, indent=2)[:14000])
           PY
@@ -150,6 +154,15 @@ jobs:
                         f"- Same-threshold forecast baseline: {strong.get('baseline_same_threshold_test')}", ""]
           else:
               lines += ["- Strong-signal backtest missing — no deployment approval", ""]
+          swf = load("strong_signal_walk_forward")
+          if swf:
+              lines += ["## Strong-signal walk-forward verification",
+                        f"- Verdict: {swf.get('decision')}; modeled round-trip costs: {swf.get('cost_roundtrip_pct')}%"]
+              for fold in swf.get("folds", []):
+                  lines += [f"- Fold {fold['fold']}: {fold.get('decision')}; validation {fold.get('validation')}; unseen test {fold.get('test')}"]
+              lines += [""]
+          else:
+              lines += ["- Strong-signal walk-forward unavailable — do not deploy", ""]
           lines += ["## Walk-forward forecast after modeled trading costs", ""]
           for symbol, name in (("BTC/EUR","btc_walk_forward"),("ETH/EUR","eth_walk_forward"),("SOL/EUR","sol_walk_forward")):
               report = load(name)
@@ -182,6 +195,7 @@ jobs:
             fee_sensitivity.json
             forecast_expected_value.json
             strong_signal_backtest.json
+            strong_signal_walk_forward.json
             market_forecasts.json
             btc_walk_forward.json
             eth_walk_forward.json
