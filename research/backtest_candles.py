@@ -27,7 +27,8 @@ COOLDOWN_MINUTES = 15
 def simulate(rows, start_index, fee=FEE, spread_bps=SPREAD_BPS):
     cash, position, trades, last_exit = START, None, [], -COOLDOWN_MINUTES
     friction = spread_bps / 20000 + SLIPPAGE
-    # A signal at completed bar i is filled at open of bar i+1.\n    # Limit indicator input to 240 recent bars to avoid quadratic work on months of data.
+    # A signal at completed bar i is filled at open of bar i+1.
+    # Limit indicator input to 240 recent bars to avoid quadratic work on months of data.
     # The 5m decision boundary is minute 4, 9, 14... UTC.
     for i in range(max(start_index, 180), len(rows) - 1):
         current, nxt = rows[i], rows[i + 1]
@@ -38,7 +39,14 @@ def simulate(rows, start_index, fee=FEE, spread_bps=SPREAD_BPS):
             target = entry * (1 + side * TARGET_PCT)
             stop_hit = current[3] <= stop if side == 1 else current[2] >= stop
             target_hit = current[2] >= target if side == 1 else current[3] <= target
-            # A gap beyond the stop cannot fill at the more favorable stop price.\n            gap_open = current[1]\n            if stop_hit:\n                exit_mid = min(stop, gap_open) if side == 1 else max(stop, gap_open)\n            elif target_hit:\n                exit_mid = target\n            else:\n                exit_mid = None
+            # A gap beyond the stop cannot fill at the more favorable stop price.
+            gap_open = current[1]
+            if stop_hit:
+                exit_mid = min(stop, gap_open) if side == 1 else max(stop, gap_open)
+            elif target_hit:
+                exit_mid = target
+            else:
+                exit_mid = None
             if exit_mid is None and i - opened >= MAX_HOLD_MINUTES:
                 exit_mid = nxt[1]
             if exit_mid is not None:
