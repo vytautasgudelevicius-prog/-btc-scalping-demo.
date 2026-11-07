@@ -33,6 +33,7 @@ on:
       - 'bot.py'
       - 'test_cross_market_context.py'
       - 'research/autonomous_decision_cycle.py'
+      - 'test_autonomous_decision_cycle.py'
       - 'research/best_scalping_hours.py'
       - 'test_best_scalping_hours.py'
       - 'research/strong_signal_walk_forward.py'
@@ -65,7 +66,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Verify candle tests
-        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena test_auto_optimize test_leverage_simulator test_technical_analysis_engine test_forecast_expected_value test_cross_market_context test_research_safety test_paper_integration test_strong_signal_backtest test_strong_signal_walk_forward test_best_scalping_hours -v
+        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena test_auto_optimize test_leverage_simulator test_technical_analysis_engine test_forecast_expected_value test_cross_market_context test_research_safety test_paper_integration test_strong_signal_backtest test_strong_signal_walk_forward test_best_scalping_hours test_autonomous_decision_cycle -v
       - name: Download BTC EUR 1m public historical proxy
         run: python research/fetch_proxy_history.py
       - name: Download ETH and SOL historical proxy data
@@ -183,7 +184,7 @@ jobs:
           if cycle:
               lines += ["## Autonomous BTC decision cycle",
                         f"- Verdict: {cycle.get('decision')}",
-                        f"- Historical edge verified: {cycle.get('signal_confirmation',{}).get('historical_edge_verified')}",
+                        f"- Historical edge verified: {cycle.get('signal_confirmation',{}).get('walk_forward_candidate')}",
                         f"- DEMO orders enabled: {cycle.get('demo_trade',{}).get('orders_enabled')}",
                         f"- Reason: {cycle.get('demo_trade',{}).get('reason')}", ""]
           else:
