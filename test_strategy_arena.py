@@ -7,8 +7,8 @@ def history(n=3000,delta=.01):
     return [(start+timedelta(minutes=i),100+i*delta,100+i*delta+.1,100+i*delta-.1,100+i*delta,10.) for i in range(n)]
 
 class ArenaTests(unittest.TestCase):
-    def test_six_strategies(self):
-        self.assertEqual(len(STRATEGIES),6)
+    def test_twelve_strategies(self):
+        self.assertEqual(len(STRATEGIES),12)
 
     def test_future_candles_cannot_change_past_signal(self):
         from research.candles import aggregate
