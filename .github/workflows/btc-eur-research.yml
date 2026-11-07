@@ -15,6 +15,8 @@ on:
       - 'test_market_regime.py'
       - 'research/compare_strategies.py'
       - 'test_compare_strategies.py'
+      - 'research/strategy_arena.py'
+      - 'test_strategy_arena.py'
       - 'research/fetch_multimarket_history.py'
       - 'research/candles.py'
       - 'test_candles.py'
@@ -36,7 +38,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Verify candle tests
-        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies -v
+        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena -v
       - name: Download BTC EUR 1m public historical proxy
         run: python research/fetch_proxy_history.py
       - name: Download ETH and SOL historical proxy data
@@ -55,11 +57,13 @@ jobs:
         run: python research/evaluate_cost_edge.py research/history_btceur_proxy.csv > cost_edge.json
       - name: Compare three trading strategies after fees
         run: python research/compare_strategies.py research/history_btceur_proxy.csv > strategy_comparison.json
+      - name: Run six-strategy learning arena and diagnose failures
+        run: python research/strategy_arena.py research/history_btceur_proxy.csv > strategy_arena.json
       - name: Print result summaries
         run: |
           python - <<'PY'
           import json
-          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison'):
+          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena'):
               data=json.load(open(name+'.json'))
               print(name, json.dumps(data, indent=2)[:14000])
           PY
@@ -116,4 +120,5 @@ jobs:
             transfer_comparison.json
             cost_edge.json
             strategy_comparison.json
+            strategy_arena.json
           if-no-files-found: warn
