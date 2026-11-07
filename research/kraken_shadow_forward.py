@@ -65,7 +65,7 @@ def settle(db, report):
     for candle,timestamp,direction,bid,ask in rows:
         if now-datetime.fromisoformat(timestamp).timestamp()<HORIZON_SECONDS:
             continue
-        gross,net=net_return(direction,bid,ask,report["bid"],report["ask"])
+        # Never pretend an hours-late quote is a five-minute fill.\n        if now-datetime.fromisoformat(timestamp).timestamp()>420:\n            db.execute("UPDATE observations SET settled_timestamp=? WHERE candle=? AND settled_timestamp IS NULL",\n                       (report["timestamp_utc"],candle))\n            continue\n        gross,net=net_return(direction,bid,ask,report["bid"],report["ask"])
         db.execute("""UPDATE observations SET settled_timestamp=?,exit_bid=?,exit_ask=?,
             gross_pct=?,net_pct=? WHERE candle=? AND settled_timestamp IS NULL""",
             (report["timestamp_utc"],report["bid"],report["ask"],gross,net,candle))
@@ -75,7 +75,7 @@ def settle(db, report):
 
 def summary(db):
     rows=db.execute("""SELECT net_pct FROM observations
-        WHERE candidate=1 AND settled_timestamp IS NOT NULL""").fetchall()
+        WHERE candidate=1 AND net_pct IS NOT NULL""").fetchall()
     values=[x[0] for x in rows]
     pending=db.execute("""SELECT COUNT(*) FROM observations
         WHERE candidate=1 AND settled_timestamp IS NULL""").fetchone()[0]
