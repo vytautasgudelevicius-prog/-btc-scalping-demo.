@@ -7,6 +7,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from backtest import read_csv
 from research.forecast_expected_value import run
+from research.cross_market_context import cross_market_context
 
 def compare(markets,**kwargs):
     if not markets:raise ValueError("At least one market required")
@@ -21,6 +22,7 @@ def compare(markets,**kwargs):
                r.get("untouched_test",{}).get("avg_net_pct") is not None]
     qualified.sort(key=lambda item:item[1]["untouched_test"]["avg_net_pct"],reverse=True)
     return {"markets":results,
+            "cross_market":cross_market_context(markets),
             "research_ranking":[name for name,_ in qualified],
             "live_decision":"WAIT",
             "warning":"Comparing held-out markets is exploratory, not a validated selection rule. "
