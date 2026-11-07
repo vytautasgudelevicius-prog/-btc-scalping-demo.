@@ -10,6 +10,8 @@ on:
       - 'test_candles.py'
       - 'test_candle_backtest.py'
       - 'test_train_direction.py'
+      - 'research/trading_curriculum.py'
+      - 'test_trading_curriculum.py'
       - '.github/workflows/btc-eur-research.yml'
   workflow_dispatch:
 jobs:
@@ -24,7 +26,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Verify candle tests
-        run: python -m unittest test_candles test_candle_backtest test_train_direction -v
+        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum -v
       - name: Download BTC EUR 1m public historical proxy
         run: python research/fetch_proxy_history.py
       - name: Run baseline EMA strategy
