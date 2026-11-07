@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="lt"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BTC/EUR PAPER – žvakių terminalas</title>
+<style>body{font:15px system-ui;background:#101723;color:#e9efff;margin:0;padding:18px}main{max-width:1100px;margin:auto}.panel{background:#192436;border:1px solid #334155;border-radius:12px;padding:15px;margin:12px 0}h1{font-size:22px}#chart{width:100%;height:420px}button{background:#314561;color:white;border:0;padding:9px 14px;border-radius:7px}small{color:#aebdd2}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.value{font-size:20px;font-weight:700}.bad{color:#ff8585}.good{color:#55d6a0}</style>
+<main><h1>BTC / EUR <small>1m žvakės · vieši Kraken duomenys</small></h1>
+<div class="panel"><div id="status">Kraunami vieši rinkos duomenys…</div><svg id="chart" viewBox="0 0 900 420" role="img" aria-label="BTC EUR japoniškų žvakių grafikas"></svg><small>Grafikas: tik vieši rinkos duomenys. EMA9 geltona, EMA21 mėlyna. Ne prekybos signalas.</small></div>
+<div class="grid"><div class="panel">BTC/EUR kaina<div class="value" id="price">–</div></div><div class="panel">Robotas<div class="value" id="bot">Neprijungtas</div></div><div class="panel">Virtualus balansas<div class="value" id="balance">Neprijungtas</div></div><div class="panel">Sandoriai<div class="value" id="trades">Neprijungta</div></div></div>
+<div class="panel"><button id="refresh">Atnaujinti žvakes</button> <small id="updated"></small><p><small>Šis statinis terminalas negauna Railway SQLite duomenų ir neteikia pavedimų. Balansui bei sandoriams reikia autentifikuotos, tik skaitymo API. Nepublikuokite API raktų naršyklėje.</small></p></div></main>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function node(name,attrs){const e=document.createElementNS(NS,name);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);return e}
+function ema(arr,n){let v=arr[0],alpha=2/(n+1);return arr.map(x=>(v+=alpha*(x-v),v))}
+async function refresh(){const status=document.getElementById('status');status.textContent='Kraunami vieši Kraken duomenys…';
+try{const res=await fetch('https://api.kraken.com/0/public/OHLC?pair=XBTEUR&interval=1',{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);const payload=await res.json();if(payload.error?.length)throw Error(payload.error.join('; '));const key=Object.keys(payload.result).find(k=>k!=='last');const candles=payload.result[key].slice(-91,-1).map(r=>({t:+r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4]}));if(candles.length<30)throw Error('Per mažai žvakių');const chart=document.getElementById('chart');chart.replaceChildren();const lo=Math.min(...candles.map(d=>d.l)),hi=Math.max(...candles.map(d=>d.h)),pad=(hi-lo)*.08||1;const y=p=>380-(p-(lo-pad))/(hi-lo+2*pad)*345,x=i=>40+i*9;
+for(let j=0;j<5;j++){let p=lo-pad+(hi-lo+2*pad)*j/4;chart.append(node('line',{x1:36,x2:860,y1:y(p),y2:y(p),stroke:'#334155'}));const t=node('text',{x:865,y:y(p)+4,fill:'#aebdd2','font-size':11});t.textContent=Math.round(p).toLocaleString('lt-LT');chart.append(t)}
+candles.forEach((d,i)=>{const color=d.c>=d.o?'#36ca9c':'#f47777';chart.append(node('line',{x1:x(i),x2:x(i),y1:y(d.h),y2:y(d.l),stroke:color,'stroke-width':1.5}));chart.append(node('rect',{x:x(i)-3,y:Math.min(y(d.o),y(d.c)),width:6,height:Math.max(1,Math.abs(y(d.c)-y(d.o))),fill:color}))});
+for(const [n,color] of [[9,'#f1c45a'],[21,'#77a6ff']]){const values=ema(candles.map(d=>d.c),n);chart.append(node('polyline',{points:values.map((v,i)=>x(i)+','+y(v)).join(' '),fill:'none',stroke:color,'stroke-width':2}))}
+document.getElementById('price').textContent=candles.at(-1).c.toLocaleString('lt-LT',{style:'currency',currency:'EUR'});status.textContent='Viešos Kraken 1 min. žvakės (paskutinė neužbaigta atmesta)';document.getElementById('updated').textContent='Paskutinė žvakė: '+new Date(candles.at(-1).t*1000).toLocaleString('lt-LT',{timeZone:'Europe/Vilnius'});}
+catch(e){status.textContent='Nepavyko gauti Kraken žvakių: '+e.message+'. Galimas naršyklės CORS arba tinklo ribojimas.'}}
+document.getElementById('refresh').onclick=refresh;refresh();
+</script></html>
