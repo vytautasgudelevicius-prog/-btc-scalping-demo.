@@ -51,7 +51,7 @@ def read_csv(path):
         raise ValueError("Invalid last OHLCV candle")
     return data
 
-def evaluate(rows, spread_bps=5, start_bar=220):
+def evaluate(rows, spread_bps=5, start_bar=220, fee=FEE):
     closes=[r[4] for r in rows]
     fast,slow=ema(closes,9),ema(closes,21)
     cash=START
@@ -80,7 +80,7 @@ def evaluate(rows, spread_bps=5, start_bar=220):
             if exit_mid is not None:
                 execution=exit_mid*(1-side*(spread_bps/20000+SLIP))
                 gross=side*(execution-entry)*qty
-                fee_out=qty*execution*FEE
+                fee_out=qty*execution*fee
                 pnl=gross-fee_in-fee_out
                 cash+=pnl
                 trades.append({"bar":i,"side":"LONG" if side==1 else "SHORT","net_pnl":round(pnl,6)})
@@ -95,18 +95,18 @@ def evaluate(rows, spread_bps=5, start_bar=220):
                 avg_vol=sum(r[5] for r in segment[-31:-1])/30
                 trs=[max(segment[j][2]-segment[j][3],abs(segment[j][2]-segment[j-1][4]),abs(segment[j][3]-segment[j-1][4])) for j in range(1,60)]
                 atr=sum(trs[-14:])/14/closes[i]
-                if ((side==1 and trend>=.004) or (side==-1 and trend<=-.004)) and range_pct>=2*(FEE+SLIP)+.005 and .0002<=atr<=.015 and avg_vol>0 and vol>=.5*avg_vol:
+                if ((side==1 and trend>=.004) or (side==-1 and trend<=-.004)) and range_pct>=2*(fee+SLIP)+.005 and .0002<=atr<=.015 and avg_vol>0 and vol>=.5*avg_vol:
                     entry=next_open*(1+side*(spread_bps/20000+SLIP))
-                    notional=min(cash*MAX_NOTIONAL,cash*RISK_FRACTION/(STOP+2*FEE+2*SLIP+spread_bps/10000))
+                    notional=min(cash*MAX_NOTIONAL,cash*RISK_FRACTION/(STOP+2*fee+2*SLIP+spread_bps/10000))
                     qty=notional/entry
-                    fee_in=notional*FEE
+                    fee_in=notional*fee
                     open_pos=(side,entry,qty,fee_in,i+1)
                     last_entry=i+1
         # Equity marked to hypothetical close, including exit fee.
         if open_pos:
             side,entry,qty,fee_in,opened=open_pos
             exit_price=close*(1-side*(spread_bps/20000+SLIP))
-            marked=cash+side*(exit_price-entry)*qty-fee_in-qty*exit_price*FEE
+            marked=cash+side*(exit_price-entry)*qty-fee_in-qty*exit_price*fee
         else:
             marked=cash
         equity_curve.append(marked)
@@ -134,8 +134,17 @@ def main():
         raise ValueError("Need >=250 training and >=250 holdout candles")
     # Holdout indicators warm up using earlier candles, but scoring starts at split.
     # Training trades do not carry over into holdout.
-    print(json.dumps({"in_sample":evaluate(data[:split]),
-                      "out_of_sample":evaluate(data, start_bar=split),
-                      "caveat":"Simplified 1m proxy; production 4h regime gate not reproduced. Do not use as production validation."},indent=2))
+    scenarios = {}
+    for name, fee, spread in (("taker_base_80bps", .008, 5),
+                              ("maker_40bps_idealized", .004, 5),
+                              ("taker_wide_spread", .008, 15)):
+        scenarios[name] = {
+            "fee_per_side_pct": fee * 100,
+            "spread_bps": spread,
+            "in_sample": evaluate(data[:split], spread_bps=spread, fee=fee),
+            "out_of_sample": evaluate(data, spread_bps=spread, start_bar=split, fee=fee)
+        }
+    print(json.dumps({"scenarios": scenarios,
+                      "caveat": "Maker assumes guaranteed fills (unrealistic); 1m proxy omits production 4h gate. No live validation."}, indent=2))
 if __name__=="__main__":
     main()
