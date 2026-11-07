@@ -27,7 +27,7 @@ COOLDOWN_MINUTES = 15
 def simulate(rows, start_index, fee=FEE, spread_bps=SPREAD_BPS):
     cash, position, trades, last_exit = START, None, [], -COOLDOWN_MINUTES
     friction = spread_bps / 20000 + SLIPPAGE
-    # A signal at completed bar i is filled at open of bar i+1.
+    # A signal at completed bar i is filled at open of bar i+1.\n    # Limit indicator input to 240 recent bars to avoid quadratic work on months of data.
     # The 5m decision boundary is minute 4, 9, 14... UTC.
     for i in range(max(start_index, 180), len(rows) - 1):
         current, nxt = rows[i], rows[i + 1]
@@ -54,7 +54,7 @@ def simulate(rows, start_index, fee=FEE, spread_bps=SPREAD_BPS):
         minute = int(current[0].timestamp()) // 60
         if minute % 5 != 4:
             continue
-        result = research_signal(rows[:i+1])
+        result = research_signal(rows[max(0, i - 239):i+1])
         direction = result["signal"]
         if direction not in ("LONG", "SHORT"):
             continue
@@ -84,8 +84,8 @@ def main():
     if len(sys.argv) != 2:
         raise SystemExit("Usage: python research/backtest_candles.py history.csv")
     rows = read_csv(sys.argv[1])
-    if len(rows) < 1000:
-        raise ValueError("At least 1000 consecutive 1m candles required")
+    if len(rows) < 10080:
+        raise ValueError("At least 7 days (10080) of consecutive 1m candles required; longer periods strongly preferred")
     split = int(len(rows) * .6)
     scenarios = {}
     for name, fee, spread in (("taker_80bps", .008, 5),
