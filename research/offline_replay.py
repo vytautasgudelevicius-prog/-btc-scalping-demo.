@@ -42,6 +42,8 @@ def replay(path, fee=None, slip=None):
                     last_timestamp = stamp
                     if report.get("orders_enabled") is not False:
                         raise ValueError("Historical report must be read-only")
+                    if fee is not None or slip is not None:
+                        report["estimated_roundtrip_cost_pct"] = 200 * (paper.FEE + paper.SLIP) + float(report["spread_pct"])
                     result = paper.tick(db, report)
                     current_equity = float(paper.get(db, "equity", paper.INITIAL))
                     peak = max(peak, current_equity)
