@@ -22,4 +22,4 @@ jobs:
       - name: Compile paper trader
         run: python -m py_compile research/isolated_paper_experiment.py research/unified_shadow_paper.py
       - name: Test candle research and paper safeguards
-        run: python -m unittest test_candles tests/test_paper_cost_gate.py -v
+        run: python -m unittest test_candles -v && python -m unittest discover -s tests -p 'test_paper_cost_gate.py' -v
