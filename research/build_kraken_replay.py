@@ -53,7 +53,7 @@ def completed(interval):
 
 
 def build(output):
-    minute, five, fifteen = completed(1), completed(5), completed(15)
+    minute, five, fifteen, hourly = completed(1), completed(5), completed(15), completed(60)
     count = 0
     with Path(output).open("w", encoding="utf-8") as out:
         for i in range(90, len(minute)):
@@ -62,7 +62,8 @@ def build(output):
             t = int(candle[0]) + 60
             b5 = [b for b in five if int(b[0])+300 <= t]
             b15 = [b for b in fifteen if int(b[0])+900 <= t]
-            if len(b5) < 30 or len(b15) < 30:
+            b60 = [b for b in hourly if int(b[0])+3600 <= t]
+            if len(b5) < 30 or len(b15) < 30 or len(b60) < 30:
                 continue
             last60 = minute[i-59:i+1]
             high = max(float(b[2]) for b in last60)
@@ -78,7 +79,7 @@ def build(output):
                 "spread_pct": (ask-bid)/ask*100,
                 "estimated_roundtrip_cost_pct": 200*(FEE+SLIP)+(ask-bid)/ask*100,
                 "hourly_range_pct": (high/low-1)*100,
-                "structure": {"5": structure(b5), "15": structure(b15)},
+                "structure": {"5": structure(b5), "15": structure(b15), "60": structure(b60)},
                 "decision": "OBSERVE_ONLY", "orders_enabled": False,
             }
             out.write(json.dumps(report)+"\n")
