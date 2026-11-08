@@ -114,7 +114,9 @@ def tick(db,report):
                     ",".join(reasons) or "ELIGIBLE",report["spread_pct"],
                     report["estimated_roundtrip_cost_pct"]))
         halted=equity<=day_start*(1-DAILY_LIMIT)
-        if eligible and not halted and equity>0:
+        if halted:
+            event="DAILY_LOSS_HALT"
+        elif eligible and equity>0:
             entry=ask*(1+SLIP) if direction=="LONG" else bid*(1-SLIP)
             structural=m5["support"]*(1-0.001) if direction=="LONG" else m5["resistance"]*(1+0.001)
             stop=min(entry*(1-STOP_PCT),structural) if direction=="LONG" else max(entry*(1+STOP_PCT),structural)
@@ -131,7 +133,6 @@ def tick(db,report):
                                    VALUES(?,?,?,?,?,?)""",
                                (report["last_completed_candle"],now.isoformat(),direction,entry,qty,stop))
                 if cur.rowcount: event="OPENED"
-        elif halted: event="DAILY_LOSS_HALT"
     db.commit()
     stats=db.execute("SELECT COUNT(*),COALESCE(SUM(pnl),0),SUM(CASE WHEN pnl>0 THEN 1 ELSE 0 END) FROM trades WHERE closed IS NOT NULL").fetchone()
     open_count=db.execute("SELECT COUNT(*) FROM trades WHERE closed IS NULL").fetchone()[0]
