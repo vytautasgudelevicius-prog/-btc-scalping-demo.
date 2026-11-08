@@ -1,0 +1,42 @@
+name: Kraken BTC execution economics
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'research/kraken_execution_economics.py'
+      - 'test_kraken_execution_economics.py'
+      - '.github/workflows/kraken-execution-economics.yml'
+jobs:
+  economics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify exact fee break-even arithmetic
+        run: python -m unittest test_kraken_execution_economics -v
+      - name: Calculate BTC spot gross move required to break even
+        run: |
+          python research/kraken_execution_economics.py > kraken_economics.json
+          python - <<'PY'
+          import json,os
+          d=json.load(open('kraken_economics.json'))
+          lines=['# BTC/EUR spot execution economics','',
+                 'Assumptions, not verified account rates or executable fills.','',
+                 '| Scenario | Break-even BTC move |','|---|---:|']
+          for name,r in d['scenarios'].items():
+              lines.append(f"| {name} | {r['break_even_gross_move_pct']}% |")
+          lines+=['','**NO DEPLOYMENT AUTHORIZED**']
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('\n'.join(lines))
+          print('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kraken-execution-economics
+          path: kraken_economics.json
