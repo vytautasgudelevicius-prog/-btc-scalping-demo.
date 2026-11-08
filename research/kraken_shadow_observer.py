@@ -25,6 +25,25 @@ def observe(fetch=api):
     age=now-int(candles[-1][0])
     if not 0<=age<=180:
         raise ValueError("Stale candles; no signal")
+    # Closed 5m and 15m bars only; never use the forming candle.
+    structure={}
+    for interval in (5,15):
+        data=fetch("OHLC",{"pair":PAIR,"interval":interval})
+        k=next(k for k in data if k!="last")
+        bars=data[k][:-1]
+        if len(bars)<30 or not 0<=now-int(bars[-1][0])<=interval*60+180:
+            raise ValueError("Insufficient or stale structure candles")
+        highs_tf=[float(b[2]) for b in bars]
+        lows_tf=[float(b[3]) for b in bars]
+        closes_tf=[float(b[4]) for b in bars]
+        e9=e21=closes_tf[0]
+        for price in closes_tf:
+            e9=price*0.2+e9*0.8
+            e21=price*(2/22)+e21*(20/22)
+        structure[str(interval)]={"close":closes_tf[-1],"ema9":e9,"ema21":e21,
+            "support":min(lows_tf[-12:-1]),"resistance":max(highs_tf[-12:-1]),
+            "previous_support":min(lows_tf[-24:-12]),
+            "previous_resistance":max(highs_tf[-24:-12])}
     direction=signal(candles)
     spread_pct=(ask-bid)/ask*100
     cost_pct=(2*(FEE+SLIP))*100+spread_pct
@@ -52,6 +71,7 @@ def observe(fetch=api):
             "hourly_range_pct":round(hourly_range_pct,4),
             "required_range_pct":round(required_range_pct,4),
             "hourly_trend_pct":round(trend_pct,4),
+            "structure":structure,
             "rejection_reasons":rejection_reasons,
             "ema_signal":direction,"quality_filter":quality,
             "liquidity_atr_filter":liquid,
