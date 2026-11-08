@@ -1,0 +1,46 @@
+name: BTC annual spot momentum research
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'research/spot_long_momentum.py'
+      - '.github/workflows/btc-annual-momentum.yml'
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download twelve completed BTC/EUR months
+        env:
+          BTC_HISTORY_MONTHS: '12'
+        run: python research/fetch_proxy_history.py
+      - name: Evaluate BTC spot LONG momentum with holdout and costs
+        run: |
+          python research/spot_long_momentum.py research/history_btceur_proxy.csv > annual_momentum.json
+          python - <<'PY'
+          import json,os
+          d=json.load(open('annual_momentum.json'))
+          lines=['# BTC annual spot LONG momentum research','',
+                 'Research only: no DEMO or live deployment.']
+          for name,v in d.items():
+              lines.extend(['',f'## {name}',
+                  f"Completed 4h bars: {v['bars']}",
+                  f"Roundtrip cost: {v['roundtrip_cost_pct']}%",
+                  f"Validation selected: {v['selected_on_validation']}",
+                  f"Untouched holdout: {v['untouched_test']}",
+                  f"Verdict: {v['decision']}"])
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('\n'.join(lines))
+          print('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-annual-momentum
+          path: annual_momentum.json
