@@ -10,7 +10,7 @@ INITIAL=1000.0
 RISK=0.005
 DAILY_LIMIT=0.02
 STOP_PCT=0.01
-MAX_HOLD=300
+# No time-based exit; hard stop and structural invalidation only.
 # Experimental paper-only trend entry; production signal remains unchanged.
 MIN_HOURLY_TREND_PCT=0.15
 MIN_HOURLY_RANGE_PCT=0.25
@@ -44,31 +44,49 @@ def tick(db,report):
         put(db,"day_start_equity",equity)
     day_start=float(get(db,"day_start_equity",equity))
     active=db.execute("SELECT id,opened,direction,entry,qty,stop FROM trades WHERE closed IS NULL").fetchone()
+    s=report.get("structure",{})
+    m5,m15=s.get("5",{}),s.get("15",{})
+    if not m5 or not m15: raise ValueError("Missing completed 5m/15m structure")
     event="WAIT"
     if active:
         tid,opened,direction,entry,qty,stop=active
-        held=(now-datetime.fromisoformat(opened)).total_seconds()
         exit_quote=bid*(1-SLIP) if direction=="LONG" else ask*(1+SLIP)
+        # Do not interpret one adverse candle as a reversal.
+        reversal=(m5["ema9"]<m5["ema21"] and m15["ema9"]<m15["ema21"]
+                  and m5["close"]<m5["support"] and m15["close"]<m15["support"]) if direction=="LONG" else (
+                  m5["ema9"]>m5["ema21"] and m15["ema9"]>m15["ema21"]
+                  and m5["close"]>m5["resistance"] and m15["close"]>m15["resistance"])
+        # Tighten only; never loosen a protective stop.
+        if direction=="LONG":
+            candidate=m5["support"]*(1-0.001)
+            if candidate>stop and candidate<bid: stop=candidate
+        else:
+            candidate=m5["resistance"]*(1+0.001)
+            if candidate<stop and candidate>ask: stop=candidate
+        db.execute("UPDATE trades SET stop=? WHERE id=?",(stop,tid))
         stop_hit=exit_quote<=stop if direction=="LONG" else exit_quote>=stop
-        if stop_hit or held>=MAX_HOLD:
+        if stop_hit or reversal:
             pnl=(exit_quote-entry)*qty if direction=="LONG" else (entry-exit_quote)*qty
             pnl-=(entry+exit_quote)*qty*FEE
             equity+=pnl
             db.execute("UPDATE trades SET closed=?,exit=?,pnl=?,reason=? WHERE id=?",
-                       (now.isoformat(),exit_quote,pnl,"STOP" if stop_hit else "TIME",tid))
+                       (now.isoformat(),exit_quote,pnl,"STOP" if stop_hit else "STRUCTURE_REVERSAL",tid))
             put(db,"equity",equity)
             event="CLOSED"
     else:
-        # Forward-only experiment: sustained hourly momentum and a spread gate.
-        trend=float(report.get("hourly_trend_pct",0))
-        hourly_range=float(report.get("hourly_range_pct",0))
-        direction="LONG" if trend>=MIN_HOURLY_TREND_PCT else ("SHORT" if trend<=-MIN_HOURLY_TREND_PCT else "WAIT")
-        eligible=(direction!="WAIT" and hourly_range>=MIN_HOURLY_RANGE_PCT
-                  and report["spread_pct"]<=MAX_SPREAD_PCT)
+        # Multi-timeframe trend alignment on completed 5m/15m bars.
+        long_ok=(m5["ema9"]>m5["ema21"] and m15["ema9"]>m15["ema21"]
+                 and m5["close"]>m5["support"] and m15["close"]>m15["support"])
+        short_ok=(m5["ema9"]<m5["ema21"] and m15["ema9"]<m15["ema21"]
+                  and m5["close"]<m5["resistance"] and m15["close"]<m15["resistance"])
+        direction="LONG" if long_ok else ("SHORT" if short_ok else "WAIT")
+        eligible=(direction!="WAIT" and report["spread_pct"]<=MAX_SPREAD_PCT
+                  and report["hourly_range_pct"]>=report["estimated_roundtrip_cost_pct"])
         halted=equity<=day_start*(1-DAILY_LIMIT)
         if eligible and not halted and equity>0:
             entry=ask*(1+SLIP) if direction=="LONG" else bid*(1-SLIP)
-            stop=entry*(1-STOP_PCT) if direction=="LONG" else entry*(1+STOP_PCT)
+            structural=m5["support"]*(1-0.001) if direction=="LONG" else m5["resistance"]*(1+0.001)
+            stop=min(entry*(1-STOP_PCT),structural) if direction=="LONG" else max(entry*(1+STOP_PCT),structural)
             # Risk includes worst-case stop execution plus two taker fees.
             unit_risk=abs(entry-stop)+(entry+stop)*FEE
             qty=min(equity*RISK/unit_risk,equity/entry)
