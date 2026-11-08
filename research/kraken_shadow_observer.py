@@ -25,9 +25,9 @@ def observe(fetch=api):
     age=now-int(candles[-1][0])
     if not 0<=age<=180:
         raise ValueError("Stale candles; no signal")
-    # Closed 5m and 15m bars only; never use the forming candle.
+    # Closed 5m, 15m and 1h bars only; never use the forming candle.
     structure={}
-    for interval in (5,15):
+    for interval in (5,15,60):
         data=fetch("OHLC",{"pair":PAIR,"interval":interval})
         k=next(k for k in data if k!="last")
         bars=data[k][:-1]
