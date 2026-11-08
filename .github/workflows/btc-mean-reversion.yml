@@ -1,0 +1,46 @@
+name: BTC mean reversion research
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'research/mean_reversion_regime.py'
+      - '.github/workflows/btc-mean-reversion.yml'
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch twelve months BTC/EUR spot proxy
+        env:
+          BTC_HISTORY_MONTHS: '12'
+        run: python research/fetch_proxy_history.py
+      - name: Validate regime mean reversion after costs
+        run: |
+          python research/mean_reversion_regime.py research/history_btceur_proxy.csv > mean_reversion.json
+          python - <<'PY'
+          import json,os
+          d=json.load(open('mean_reversion.json'))
+          lines=['# BTC mean reversion regime research','',
+                 'Research only; no Railway or DEMO promotion.']
+          for name,r in d.items():
+              lines+=['',f'## {name}',
+                      f"Bars: {r['bars']}",
+                      f"Roundtrip cost: {r['cost_pct']}%",
+                      f"Selected on validation: {r['selected_on_validation']}",
+                      f"Untouched holdout: {r['untouched_holdout']}",
+                      f"Verdict: {r['decision']}"]
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('\n'.join(lines))
+          print('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-mean-reversion-results
+          path: mean_reversion.json
