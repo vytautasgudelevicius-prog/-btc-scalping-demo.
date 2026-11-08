@@ -1,0 +1,43 @@
+name: BTC regime significance vs random entries
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'research/regime_significance.py'
+      - '.github/workflows/btc-regime-significance.yml'
+jobs:
+  statistics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download 36-month BTC/EUR spot proxy
+        env:
+          BTC_HISTORY_MONTHS: '36'
+        run: python research/fetch_4h_history.py
+      - name: Audit statistical significance and random entry null
+        run: |
+          python -m research.regime_significance research/btceur_4h_36months.csv > regime_significance.json
+          python - <<'PY'
+          import json,os
+          d=json.load(open('regime_significance.json'))
+          lines=['# BTC regime statistical significance','',
+            '36-month spot proxy; 3000 deterministic bootstrap/random-entry resamples.',
+            'Training selection, validation with multiple-testing correction, untouched test only if confirmed.',
+            '',f"Train candidate: {d['train_candidate']}",
+            f"Validation: {d['validation']}",
+            f"Untouched test: {d['untouched_test']}",
+            f"Decision: {d['decision']}"]
+          print('\n'.join(lines))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-regime-significance
+          path: regime_significance.json
