@@ -1,0 +1,47 @@
+name: BTC 36-month breakout and risk
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'research/donchian_risk.py'
+      - 'research/fetch_4h_history.py'
+      - '.github/workflows/btc-36month-risk.yml'
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download 36 completed months of BTC/EUR 4h bars
+        env:
+          BTC_HISTORY_MONTHS: '36'
+        run: python research/fetch_4h_history.py
+      - name: Validate risk-managed breakout on untouched holdout
+        run: |
+          python research/donchian_risk.py research/btceur_4h_36months.csv > breakout_36months.json
+          python - <<'PY'
+          import json,os
+          d=json.load(open('breakout_36months.json'))
+          lines=['# BTC 36-month breakout / drawdown research','',
+                 'Research only; no real orders or DEMO deployment.']
+          for name,v in d.items():
+              lines+=['',f'## {name}',f"4h bars: {v['bars']}",
+                      f"Validation selection: {v['selected_validation']}",
+                      f"Unseen holdout: {v['holdout']}",
+                      f"Decision: {v['decision']}"]
+              for k,m in sorted(v['validation'].items(),key=lambda x:x[1]['net_return_pct'],reverse=True)[:5]:
+                  lines.append(f"Validation {k}: return {m['net_return_pct']}%, max drawdown {m['max_drawdown_pct']}%, entries {m['entries']}")
+          print('\n'.join(lines))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-36month-risk-results
+          path: breakout_36months.json
