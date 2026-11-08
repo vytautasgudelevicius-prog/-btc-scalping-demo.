@@ -44,7 +44,10 @@ def tick(db,report):
         put(db,"day",day)
         put(db,"day_start_equity",equity)
     day_start=float(get(db,"day_start_equity",equity))
-    active=db.execute("SELECT id,opened,direction,entry,qty,stop FROM trades WHERE closed IS NULL").fetchone()
+    active_rows=db.execute("SELECT id,opened,direction,entry,qty,stop FROM trades WHERE closed IS NULL").fetchall()
+    if len(active_rows)>1:
+        raise ValueError("Fail-closed: multiple open paper positions")
+    active=active_rows[0] if active_rows else None
     s=report.get("structure",{})
     m5,m15=s.get("5",{}),s.get("15",{})
     if not m5 or not m15: raise ValueError("Missing completed 5m/15m structure")
