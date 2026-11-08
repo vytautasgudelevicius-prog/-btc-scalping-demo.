@@ -15,6 +15,7 @@ on:
       - 'test_market_regime.py'
       - 'research/compare_strategies.py'
       - 'test_compare_strategies.py'
+      - 'research/multihour_edge.py'
       - 'research/strategy_arena.py'
       - 'research/extra_strategies.py'
       - 'test_strategy_arena.py'
@@ -89,6 +90,8 @@ jobs:
         run: python research/evaluate_cost_edge.py research/history_btceur_proxy.csv > cost_edge.json
       - name: Compare three trading strategies after fees
         run: python research/compare_strategies.py research/history_btceur_proxy.csv > strategy_comparison.json
+      - name: Test multi-hour non-overlapping LONG SHORT holdout after costs
+        run: python research/multihour_edge.py research/history_btceur_proxy.csv > multihour_edge.json
       - name: Run twelve-strategy learning arena and diagnose failures
         run: python research/strategy_arena.py research/history_btceur_proxy.csv > strategy_arena.json
       - name: Tune parameters on validation and retest untouched BTC holdout
@@ -116,7 +119,7 @@ jobs:
         run: |
           python - <<'PY'
           import json
-          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'auto_optimize', 'fee_sensitivity', 'forecast_expected_value', 'strong_signal_backtest', 'strong_signal_walk_forward', 'best_scalping_hours', 'autonomous_decision_cycle', 'market_forecasts', 'btc_walk_forward', 'eth_walk_forward', 'sol_walk_forward'):
+          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'multihour_edge', 'auto_optimize', 'fee_sensitivity', 'forecast_expected_value', 'strong_signal_backtest', 'strong_signal_walk_forward', 'best_scalping_hours', 'autonomous_decision_cycle', 'market_forecasts', 'btc_walk_forward', 'eth_walk_forward', 'sol_walk_forward'):
               data=json.load(open(name+'.json'))
               print(name, json.dumps(data, indent=2)[:14000])
           PY
@@ -141,6 +144,12 @@ jobs:
                         f"- BTC + ETH + SOL accuracy: {multi['accuracy_pct']}% ({multi['signals']} signals)", ""]
           else:
               lines += ["- Multi-market comparison unavailable (check failed step).", ""]
+          multi_hour = load("multihour_edge")
+          if multi_hour:
+              lines += ["## Multi-hour LONG/SHORT holdout after costs",
+                        f"- Verdict: {multi_hour.get('decision')}",
+                        f"- Validation-selected strategy: {multi_hour.get('selected_on_validation')}",
+                        f"- Untouched test: {multi_hour.get('untouched_test')}", ""]
           edge = load("cost_edge")
           if edge and edge.get("test"):
               test = edge["test"]
