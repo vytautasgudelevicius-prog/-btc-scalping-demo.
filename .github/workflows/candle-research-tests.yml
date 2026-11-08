@@ -23,3 +23,15 @@ jobs:
         run: python -m py_compile research/isolated_paper_experiment.py research/unified_shadow_paper.py
       - name: Test candle research and paper safeguards
         run: python -m unittest test_candles -v && python -m unittest discover -s tests -p 'test_paper_*.py' -v
+  replay-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch completed Kraken candles and replay paper strategy
+        run: |
+          python -m research.build_kraken_replay --output /tmp/kraken_snapshots.jsonl
+          python -m research.offline_replay /tmp/kraken_snapshots.jsonl
