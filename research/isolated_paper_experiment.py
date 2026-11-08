@@ -87,16 +87,19 @@ def tick(db,report):
                       m5.get("lower_highs",False) if direction=="SHORT" else False)
         rejection=(m5.get("upper_wick_ratio",0)>0.6 if direction=="LONG" else
                    m5.get("lower_wick_ratio",0)>0.6 if direction=="SHORT" else True)
+        false_break=(m5.get("false_break_up",False) or m15.get("false_break_up",False)) if direction=="LONG" else (
+            m5.get("false_break_down",False) or m15.get("false_break_down",False)) if direction=="SHORT" else False
         # Recent range is a cost gate, not a price forecast.
         cost_ok=report["hourly_range_pct"]>=report["estimated_roundtrip_cost_pct"]
         eligible=(direction!="WAIT" and report["spread_pct"]<=MAX_SPREAD_PCT
-                  and cost_ok and volume_ok and structure_ok and not rejection)
+                  and cost_ok and volume_ok and structure_ok and not rejection and not false_break)
         reasons=[]
         if direction=="WAIT": reasons.append("NO_ALIGNED_TREND")
         if not cost_ok: reasons.append("COST_EXCEEDS_RECENT_RANGE")
         if not volume_ok: reasons.append("LOW_VOLUME")
         if not structure_ok: reasons.append("WEAK_MARKET_STRUCTURE")
         if rejection: reasons.append("REJECTION_WICK")
+        if false_break: reasons.append("FALSE_BREAKOUT")
         if report["spread_pct"]>MAX_SPREAD_PCT: reasons.append("SPREAD")
         db.execute("INSERT OR IGNORE INTO decisions VALUES(?,?,?,?,?,?,?)",
                    (report["last_completed_candle"],now.isoformat(),direction,int(eligible),
