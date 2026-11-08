@@ -80,7 +80,7 @@ def build(output):
             b5 = [b for b in five if int(b[0])+300 <= t]
             b15 = [b for b in fifteen if int(b[0])+900 <= t]
             b60 = [b for b in hourly if int(b[0])+3600 <= t]
-            if len(b5) < 30 or len(b15) < 30 or len(b60) < 30:
+            if len(b5) < 30 or len(b15) < 30 or len(b60) < 3:
                 continue
             last60 = minute[i-59:i+1]
             high = max(float(b[2]) for b in last60)
@@ -96,7 +96,8 @@ def build(output):
                 "spread_pct": (ask-bid)/ask*100,
                 "estimated_roundtrip_cost_pct": 200*(FEE+SLIP)+(ask-bid)/ask*100,
                 "hourly_range_pct": (high/low-1)*100,
-                "structure": {"5": structure(b5), "15": structure(b15), "60": structure(b60)},
+                "structure": {"5": structure(b5), "15": structure(b15),
+                              **({"60": structure(b60)} if len(b60) >= 30 else {})},
                 "decision": "OBSERVE_ONLY", "orders_enabled": False,
             }
             out.write(json.dumps(report)+"\n")
