@@ -27,7 +27,7 @@ def simulate(rows,start,end,lookback,atr_mult,risk_pct,fee_side=.008,spread_bps=
         # Stops already active before current candle: pessimistic gap handling
         if qty>0 and l<=stop:
             sell=min(o,stop)*(1-friction)*(1-fee_side)
-            cash=qty*sell;qty=0.;closed+=1
+            cash+=qty*sell;qty=0.;closed+=1
             wins+=cash>entry_value;stop=None
         # Signal at previous completed close; fill at current open
         if i>start and qty==0 and i>=max(200,lookback+1):
