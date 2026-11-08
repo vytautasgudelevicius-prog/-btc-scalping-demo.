@@ -31,7 +31,7 @@ def observe(fetch=api):
         data=fetch("OHLC",{"pair":PAIR,"interval":interval})
         k=next(k for k in data if k!="last")
         bars=data[k][:-1]
-        if len(bars)<30 or not 0<=now-int(bars[-1][0])<=interval*60+180:
+        if len(bars)<30 or not 0<=now-int(bars[-1][0])<=2*interval*60+180:
             raise ValueError("Insufficient or stale structure candles")
         highs_tf=[float(b[2]) for b in bars]
         lows_tf=[float(b[3]) for b in bars]
@@ -40,7 +40,17 @@ def observe(fetch=api):
         for price in closes_tf:
             e9=price*0.2+e9*0.8
             e21=price*(2/22)+e21*(20/22)
+        recent=bars[-20:]
+        volumes=[float(b[6]) for b in recent]
+        body=abs(float(bars[-1][4])-float(bars[-1][1]))
+        candle_range=max(float(bars[-1][2])-float(bars[-1][3]),1e-9)
         structure[str(interval)]={"close":closes_tf[-1],"ema9":e9,"ema21":e21,
+            "volume_ratio":volumes[-1]/max(sum(volumes[:-1])/len(volumes[:-1]),1e-9),
+            "body_ratio":body/candle_range,
+            "upper_wick_ratio":(float(bars[-1][2])-max(float(bars[-1][1]),float(bars[-1][4])))/candle_range,
+            "lower_wick_ratio":(min(float(bars[-1][1]),float(bars[-1][4]))-float(bars[-1][3]))/candle_range,
+            "higher_lows":min(lows_tf[-6:])>min(lows_tf[-12:-6]),
+            "lower_highs":max(highs_tf[-6:])<max(highs_tf[-12:-6]),
             "support":min(lows_tf[-12:-1]),"resistance":max(highs_tf[-12:-1]),
             "previous_support":min(lows_tf[-24:-12]),
             "previous_resistance":max(highs_tf[-24:-12])}
