@@ -57,6 +57,14 @@ def tick(db,report):
                   and m5["close"]<m5["previous_support"] and m15["close"]<m15["previous_support"]) if direction=="LONG" else (
                   m5["ema9"]>m5["ema21"] and m15["ema9"]>m15["ema21"]
                   and m5["close"]>m5["previous_resistance"] and m15["close"]>m15["previous_resistance"])
+        # Dynamic break-even: lock in estimated round-trip fees only after
+        # a favorable move of at least twice the initial modeled stop risk.
+        # This never widens the protective stop and never increases exposure.
+        fee_buffer=2*FEE+2*SLIP
+        if direction=="LONG" and bid>=entry*(1+max(2*STOP_PCT,2*fee_buffer)):
+            stop=max(stop,entry*(1+fee_buffer))
+        elif direction=="SHORT" and ask<=entry*(1-max(2*STOP_PCT,2*fee_buffer)):
+            stop=min(stop,entry*(1-fee_buffer))
         # Tighten only; never loosen a protective stop.
         if direction=="LONG":
             candidate=m5["support"]*(1-0.001)
