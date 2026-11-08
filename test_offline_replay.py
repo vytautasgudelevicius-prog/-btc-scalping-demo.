@@ -121,6 +121,29 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(result["open_positions"], 0)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM trades").fetchone()[0], 0)
 
+    def test_position_sizing_includes_adverse_stop_slippage(self):
+        import sqlite3
+        r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
+        for timeframe in ("5", "15"):
+            r["structure"][timeframe].update({
+                "ema9": 103.0, "ema21": 100.0, "close": 104.0,
+                "support": 99.0, "resistance": 150.0,
+                "higher_lows": True, "volume_ratio": 1.5,
+            })
+        r["hourly_range_pct"] = 4.0
+        with sqlite3.connect(":memory:") as db:
+            paper.init(db)
+            result = paper.tick(db, r)
+            self.assertEqual(result["event"], "OPENED")
+            direction, entry, qty, stop = db.execute(
+                "SELECT direction,entry,qty,stop FROM trades WHERE closed IS NULL"
+            ).fetchone()
+            self.assertEqual(direction, "LONG")
+            worst_exit = stop * (1 - paper.SLIP)
+            modeled_loss = qty * (entry - worst_exit + (entry + worst_exit) * paper.FEE)
+            self.assertLessEqual(modeled_loss, paper.INITIAL * paper.RISK + 1e-8)
+            self.assertGreater(modeled_loss, 0)
+
     def test_hourly_aggregation_uses_only_completed_quarters(self):
         from research.build_kraken_replay import hourly_from_fifteen
         bars = [[i * 900, "100", "103", "98", str(100+i), "0", "2"]
