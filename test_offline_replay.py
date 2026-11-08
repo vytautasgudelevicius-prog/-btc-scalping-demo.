@@ -85,6 +85,21 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(result["event"], "DAILY_LOSS_HALT")
             self.assertEqual(result["equity_eur"], 950)
 
+    def test_multiple_open_positions_fail_closed(self):
+        import sqlite3
+        r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
+        with sqlite3.connect(":memory:") as db:
+            paper.init(db)
+            db.executemany(
+                "INSERT INTO trades(candle,opened,direction,entry,qty,stop) VALUES(?,?,?,?,?,?)",
+                [("a", r["timestamp_utc"], "LONG", 100, 0.01, 95),
+                 ("b", r["timestamp_utc"], "LONG", 100, 0.01, 95)])
+            db.commit()
+            with self.assertRaisesRegex(ValueError, "multiple open paper positions"):
+                paper.tick(db, r)
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM trades WHERE closed IS NULL").fetchone()[0], 2)
+
     def test_daily_halt_blocks_otherwise_eligible_entry(self):
         import sqlite3
         r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
