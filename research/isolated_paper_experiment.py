@@ -120,7 +120,7 @@ def tick(db,report):
             stop=min(entry*(1-STOP_PCT),structural) if direction=="LONG" else max(entry*(1+STOP_PCT),structural)
             # Risk includes worst-case stop execution plus two taker fees.
             unit_risk=abs(entry-stop)+(entry+stop)*FEE
-            # Require a plausible 2:1 gross reward/risk against structural target.
+            # Require a plausible 2:1 NET reward/risk against structural target.
             target=m15["resistance"] if direction=="LONG" else m15["support"]
             reward=(target-entry if direction=="LONG" else entry-target)
             reward_net=reward-(entry+target)*FEE
