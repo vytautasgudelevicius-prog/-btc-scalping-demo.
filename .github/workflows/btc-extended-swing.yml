@@ -1,0 +1,45 @@
+name: BTC extended swing research
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'research/extended_swing_edge.py'
+      - 'research/fetch_proxy_history.py'
+      - '.github/workflows/btc-extended-swing.yml'
+jobs:
+  historical-swing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download six completed months of BTC/EUR spot proxy
+        env:
+          BTC_HISTORY_MONTHS: '6'
+        run: python research/fetch_proxy_history.py
+      - name: Test 4h trend and breakout on unseen holdout
+        run: |
+          python research/extended_swing_edge.py research/history_btceur_proxy.csv > swing.json
+          python - <<'PY'
+          import json,os
+          d=json.load(open('swing.json'))
+          lines=["# BTC 4h swing research (6 months)","",
+                 f"Completed 4h bars: {d['completed_4h_bars']}",
+                 f"Roundtrip cost: {d['roundtrip_cost_pct']}%",
+                 f"Validation choice: {d['selected_on_validation']}",
+                 f"Unseen holdout: {d['untouched_test']}",
+                 f"Verdict: {d['decision']}","",
+                 "RESEARCH ONLY. No Railway deployment; no live or DEMO orders.",
+                 "Spot proxy does not validate SHORT borrowing, margin or Kraken fills."]
+          open(os.environ['GITHUB_STEP_SUMMARY'],'a').write('\n'.join(lines))
+          print('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extended-swing-research
+          path: swing.json
