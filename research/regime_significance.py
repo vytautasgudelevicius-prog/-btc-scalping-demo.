@@ -57,22 +57,24 @@ def study(rows):
     # Family-wise correction for six regimes x three horizons (18 hypotheses).
     # Choose on training only, using positive net mean and sample sufficiency.
     candidates=[]
+    screening=[]
     for h in HORIZONS:
         train=observations(rows,180,a,h)
         for target in sorted(set(k for k,_ in train)):
             result=audit(rows,180,a,h,target,SEED+h)
+            screening.append({"regime":target,"holding_bars":h,**result})
             if result.get("eligible") and result["mean_net_pct"]>0:
                 candidates.append((result["excess_vs_random_pct"],target,h,result))
     candidates.sort(reverse=True)
     if not candidates:
-        return {"bars":len(rows),"train_candidate":None,"validation":None,
+        return {"bars":len(rows),"training_screening":screening,"train_candidate":None,"validation":None,
                 "untouched_test":None,"decision":"NO_EDGE"}
     _,target,h,training=candidates[0]
     validation=audit(rows,a,b,h,target,SEED+1000+h)
     # Bonferroni adjustment for exploratory family of 18 potential choices.
     validated=validation.get("eligible") and validation.get("passes") and validation["random_entry_one_sided_p"]<.05/18
     test=audit(rows,b,len(rows),h,target,SEED+2000+h) if validated else None
-    return {"bars":len(rows),"hypotheses_screened":18,
+    return {"bars":len(rows),"training_screening":screening,"hypotheses_screened":18,
             "train_candidate":{"regime":target,"holding_4h_bars":h,"statistics":training},
             "validation":validation,"untouched_test":test,
             "decision":"CANDIDATE_FOR_FURTHER_RESEARCH" if validated and test and test.get("passes") else "NO_EDGE",
