@@ -85,6 +85,27 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(result["event"], "DAILY_LOSS_HALT")
             self.assertEqual(result["equity_eur"], 950)
 
+    def test_daily_halt_blocks_otherwise_eligible_entry(self):
+        import sqlite3
+        r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
+        for timeframe in ("5", "15"):
+            r["structure"][timeframe].update({
+                "ema9": 103.0, "ema21": 100.0, "close": 104.0,
+                "support": 98.0, "resistance": 150.0,
+                "higher_lows": True, "volume_ratio": 1.5,
+            })
+        r["hourly_range_pct"] = 4.0
+        with sqlite3.connect(":memory:") as db:
+            paper.init(db)
+            paper.put(db, "equity", 950)
+            paper.put(db, "day", "2026-11-01")
+            paper.put(db, "day_start_equity", 1000)
+            db.commit()
+            result = paper.tick(db, r)
+            self.assertEqual(result["event"], "DAILY_LOSS_HALT")
+            self.assertEqual(result["open_positions"], 0)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM trades").fetchone()[0], 0)
+
     def test_hourly_aggregation_uses_only_completed_quarters(self):
         from research.build_kraken_replay import hourly_from_fifteen
         bars = [[i * 900, "100", "103", "98", str(100+i), "0", "2"]
