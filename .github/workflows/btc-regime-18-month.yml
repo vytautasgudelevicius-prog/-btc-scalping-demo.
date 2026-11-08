@@ -1,0 +1,47 @@
+name: BTC 18-month regime robustness
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/btc-regime-18-month.yml'
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download 18 completed months BTC/EUR proxy
+        env:
+          BTC_HISTORY_MONTHS: '18'
+        run: python research/fetch_proxy_history.py
+      - name: Test existing unchanged spot regime strategy over longer history
+        run: |
+          python research/spot_regime_vs_hold.py research/history_btceur_proxy.csv > regime_18_month.json
+          python - <<'PY'
+          import json,os
+          data=json.load(open('regime_18_month.json'))
+          lines=['# BTC spot long-flat regime: 18-month robustness','',
+                 'No parameter tuning on untouched holdout; no deployment.']
+          for name,r in data.items():
+              lines+=['',f'## {name}',f"Completed 4h bars: {r['bars']}",
+                      f"Cost per roundtrip: {r['roundtrip_cost_pct']}%",
+                      f"Selected on validation: {r['selected_on_validation']}",
+                      f"Unseen holdout: {r['untouched_holdout']}",
+                      f"Verdict: {r['decision']}"]
+              for key,v in sorted(r['validation_candidates'].items(),
+                    key=lambda kv:kv[1]['net_return_pct'],reverse=True)[:5]:
+                  lines.append(f"Candidate {key}: net {v['net_return_pct']}%, excess vs hold {v['excess_vs_buy_hold_pct']}%, entries {v['entries']}")
+          print('\n'.join(lines))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-regime-18-month-results
+          path: regime_18_month.json
