@@ -55,6 +55,14 @@ def main():
                         counts[reason]=counts.get(reason,0)+1
                 settled=settle(shadow,report)
                 inserted=record(shadow,report)
+                # Persist complete forward-only entry context for reproducible
+                # old-vs-new gate comparisons. Never rewrite past observations.
+                paper.execute("""CREATE TABLE IF NOT EXISTS entry_context (
+                    candle TEXT PRIMARY KEY, timestamp TEXT NOT NULL,
+                    report_json TEXT NOT NULL)""")
+                paper.execute("INSERT OR IGNORE INTO entry_context(candle,timestamp,report_json) VALUES(?,?,?)",
+                    (report["last_completed_candle"],report["timestamp_utc"],json.dumps(report,sort_keys=True)))
+                paper.commit()
                 paper_result=paper_tick(paper,report)
                 reasons=report.get("rejection_reasons",[])
                 shadow.execute("INSERT OR IGNORE INTO signal_diagnostics(candle,timestamp,signal,reasons,eligible) VALUES(?,?,?,?,?)",(report["last_completed_candle"],report["timestamp_utc"],report["ema_signal"],json.dumps(reasons),int(report["context_candidate"])))
