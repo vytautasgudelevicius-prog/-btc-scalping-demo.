@@ -28,6 +28,8 @@ def replay(path, fee=None, slip=None):
             peak = paper.INITIAL
             max_drawdown = 0.0
             events = {}
+            rejection_counts = {}
+            eligible_decisions = 0
             with Path(path).open(encoding="utf-8") as stream:
                 for line_no, line in enumerate(stream, 1):
                     if not line.strip():
@@ -50,6 +52,12 @@ def replay(path, fee=None, slip=None):
                     max_drawdown = max(max_drawdown, (peak-current_equity)/peak * 100)
                     observations += 1
                     events[result["event"]] = events.get(result["event"], 0) + 1
+                    decision = db.execute("SELECT eligible,reason FROM decisions WHERE candle=?", (report["last_completed_candle"],)).fetchone()
+                    if decision:
+                        eligible_decisions += int(decision[0])
+                        for reason in decision[1].split(","):
+                            if reason and reason != "ELIGIBLE":
+                                rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
             if observations == 0:
                 raise ValueError("No historical observations supplied")
             rows = db.execute("SELECT pnl FROM trades WHERE closed IS NOT NULL ORDER BY id").fetchall()
@@ -77,6 +85,8 @@ def replay(path, fee=None, slip=None):
                 "equity_eur": round(equity, 2),
                 "profit_factor": round(gains / abs(losses), 3) if losses else (None if not gains else "infinite"),
                 "events": events,
+                "eligible_decisions": eligible_decisions,
+                "rejection_counts": rejection_counts,
                 "warning": "Realized-equity drawdown excludes open unrealized PnL. Offline paper simulation; no guarantee of fills or future profit."
             }
     finally:
