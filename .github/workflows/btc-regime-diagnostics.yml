@@ -1,0 +1,44 @@
+name: BTC market regime diagnostics
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'research/regime_diagnostics.py'
+      - '.github/workflows/btc-regime-diagnostics.yml'
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download BTC/EUR 36 completed months
+        env:
+          BTC_HISTORY_MONTHS: '36'
+        run: python research/fetch_4h_history.py
+      - name: Analyze market regimes without inventing trade signals
+        run: |
+          python -m research.regime_diagnostics research/btceur_4h_36months.csv > regime_diagnostics.json
+          python - <<'PY'
+          import json,os
+          d=json.load(open('regime_diagnostics.json'))
+          lines=['# BTC/EUR market regime diagnostics','',
+                 'Exploratory only. No strategy approval or deployment.']
+          for phase,buckets in d['splits'].items():
+              lines+=['',f'## {phase}']
+              for name,r in sorted(buckets.items()):
+                  for h,v in r['horizons'].items():
+                      lines.append(f"{name}, {h} bars, n={v['samples']}: gross {v['avg_gross_pct']}%, taker net {v['after_costs']['taker_taker']['avg_net_pct']}%, maker hypothetical net {v['after_costs']['maker_maker_hypothetical']['avg_net_pct']}%")
+          print('\n'.join(lines))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-regime-diagnostics
+          path: regime_diagnostics.json
