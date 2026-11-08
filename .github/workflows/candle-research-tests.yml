@@ -19,5 +19,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Test candle research
-        run: python -m unittest test_candles -v
+      - name: Compile paper trader
+        run: python -m py_compile research/isolated_paper_experiment.py research/unified_shadow_paper.py
+      - name: Test candle research and paper safeguards
+        run: python -m unittest test_candles tests/test_paper_cost_gate.py -v
