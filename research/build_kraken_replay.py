@@ -52,8 +52,25 @@ def completed(interval):
     return response[key][:-1]
 
 
+def hourly_from_fifteen(bars):
+    """Aggregate only four consecutive completed 15m bars per closed hour."""
+    groups = {}
+    for bar in bars:
+        start = int(bar[0]) // 3600 * 3600
+        groups.setdefault(start, []).append(bar)
+    result = []
+    for start, group in sorted(groups.items()):
+        if len(group) != 4 or [int(x[0]) for x in group] != list(range(start, start+3600, 900)):
+            continue
+        result.append([start, group[0][1], max(float(x[2]) for x in group),
+                       min(float(x[3]) for x in group), group[-1][4],
+                       "0", sum(float(x[6]) for x in group)])
+    return result
+
+
 def build(output):
-    minute, five, fifteen, hourly = completed(1), completed(5), completed(15), completed(60)
+    minute, five, fifteen = completed(1), completed(5), completed(15)
+    hourly = hourly_from_fifteen(fifteen)
     count = 0
     with Path(output).open("w", encoding="utf-8") as out:
         for i in range(90, len(minute)):
