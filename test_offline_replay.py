@@ -144,6 +144,49 @@ class ReplayTests(unittest.TestCase):
             self.assertLessEqual(modeled_loss, paper.INITIAL * paper.RISK + 1e-8)
             self.assertGreater(modeled_loss, 0)
 
+    def test_long_trailing_stop_only_tightens_and_survives_reopen(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "paper.sqlite3"
+            r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
+            r["bid"], r["ask"] = 110.0, 110.1
+            r["structure"]["5"]["support"] = 104.0
+            with sqlite3.connect(db_path) as db:
+                paper.init(db)
+                db.execute("INSERT INTO trades(candle,opened,direction,entry,qty,stop) VALUES(?,?,?,?,?,?)",
+                           ("entry", r["timestamp_utc"], "LONG", 100, 0.01, 95))
+                db.commit()
+                self.assertEqual(paper.tick(db, r)["open_positions"], 1)
+                tightened = db.execute("SELECT stop FROM trades WHERE closed IS NULL").fetchone()[0]
+                self.assertGreater(tightened, 95)
+            r["timestamp_utc"] = "2026-11-01T10:01:00+00:00"
+            r["last_completed_candle"] = "2026-11-01T10:00:00+00:00"
+            r["structure"]["5"]["support"] = 98.0
+            with sqlite3.connect(db_path) as db:
+                paper.init(db)
+                self.assertEqual(paper.tick(db, r)["open_positions"], 1)
+                self.assertGreaterEqual(
+                    db.execute("SELECT stop FROM trades WHERE closed IS NULL").fetchone()[0], tightened)
+
+    def test_short_trailing_stop_only_tightens(self):
+        import sqlite3
+        r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
+        r["bid"], r["ask"] = 89.9, 90.0
+        r["structure"]["5"]["resistance"] = 95.0
+        with sqlite3.connect(":memory:") as db:
+            paper.init(db)
+            db.execute("INSERT INTO trades(candle,opened,direction,entry,qty,stop) VALUES(?,?,?,?,?,?)",
+                       ("entry", r["timestamp_utc"], "SHORT", 100, 0.01, 105))
+            db.commit()
+            self.assertEqual(paper.tick(db, r)["open_positions"], 1)
+            tightened = db.execute("SELECT stop FROM trades WHERE closed IS NULL").fetchone()[0]
+            self.assertLess(tightened, 105)
+            r["timestamp_utc"] = "2026-11-01T10:01:00+00:00"
+            r["structure"]["5"]["resistance"] = 110.0
+            self.assertEqual(paper.tick(db, r)["open_positions"], 1)
+            self.assertLessEqual(
+                db.execute("SELECT stop FROM trades WHERE closed IS NULL").fetchone()[0], tightened)
+
     def test_hourly_aggregation_uses_only_completed_quarters(self):
         from research.build_kraken_replay import hourly_from_fifteen
         bars = [[i * 900, "100", "103", "98", str(100+i), "0", "2"]
