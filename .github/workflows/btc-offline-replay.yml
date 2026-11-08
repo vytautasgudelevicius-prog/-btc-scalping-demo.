@@ -1,0 +1,35 @@
+name: BTC offline replay validation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'research/build_kraken_replay.py'
+      - 'research/offline_replay.py'
+      - 'research/compare_cost_scenarios.py'
+      - 'research/isolated_paper_experiment.py'
+      - 'test_offline_replay.py'
+      - '.github/workflows/btc-offline-replay.yml'
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit tests
+        run: python -m unittest test_offline_replay -v
+      - name: Build point-in-time Kraken OHLC snapshots
+        run: python -m research.build_kraken_replay --output /tmp/btc_snapshots.jsonl
+      - name: Cost and slippage sensitivity
+        run: python -m research.compare_cost_scenarios /tmp/btc_snapshots.jsonl | tee /tmp/btc_results.json
+      - name: Preserve research outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: btc-replay-research
+          path: |
+            /tmp/btc_results.json
+            /tmp/btc_snapshots.jsonl
+          if-no-files-found: warn
