@@ -4,7 +4,7 @@ Fail closed on gaps, duplicate timestamps, invalid OHLC and insufficient coverag
 import csv,io,os,urllib.request,zipfile
 from datetime import datetime,timezone
 from pathlib import Path
-from research.fetch_proxy_history import completed_months
+from fetch_proxy_history import completed_months
 
 OUT=Path("research/btceur_4h_36months.csv")
 def main():
