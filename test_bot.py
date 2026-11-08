@@ -84,10 +84,13 @@ class ExitGuardTests(unittest.TestCase):
                 closed, remaining, _ = self.cycle(invalid=quote)
                 self.assertEqual((closed, remaining), ([], 1))
 
-    def test_healthy_market_still_opens_entry(self):
+    def test_unvalidated_research_gate_blocks_entry_even_with_healthy_quotes(self):
+        # The legacy paper loop deliberately refuses new entries until
+        # independent research validation. The separate isolated DEMO
+        # experiment has its own entry logic and is tested separately.
         closed, remaining, cash = self.cycle(position=False)
-        self.assertEqual((closed, remaining), ([], 1))
-        self.assertLess(cash, bot.INITIAL)
+        self.assertEqual((closed, remaining), ([], 0))
+        self.assertEqual(cash, bot.INITIAL)
 
 
 if __name__ == "__main__":
