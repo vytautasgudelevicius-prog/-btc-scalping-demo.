@@ -102,6 +102,18 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(result["observations"], 1)
         self.assertEqual(r["estimated_roundtrip_cost_pct"], original_cost)
 
+    def test_hourly_aggregation_rejects_missing_quarter(self):
+        from research.build_kraken_replay import hourly_from_fifteen
+        bars = [[i * 900, "100", "103", "98", str(100+i), "0", "2"]
+                for i in (0, 1, 3, 4)]
+        self.assertEqual(hourly_from_fifteen(bars), [])
+
+    def test_hourly_aggregation_does_not_use_incomplete_hour(self):
+        from research.build_kraken_replay import hourly_from_fifteen
+        bars = [[i * 900, "100", "103", "98", str(100+i), "0", "2"]
+                for i in range(3)]
+        self.assertEqual(hourly_from_fifteen(bars), [])
+
     def test_fee_override_restored(self):
         original = paper.FEE
         r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
