@@ -11,11 +11,32 @@ from research.cost_sensitivity import analyze as analyze_costs
 SHADOW="/data/kraken_shadow.sqlite3"
 PAPER="/data/experiment.sqlite3"
 
+def emit_closed_trade_audit(paper):
+    """Read-only per-trade diagnostics. Does not change the trading database."""
+    rows = paper.execute(
+        "SELECT id,opened,closed,direction,entry,exit,qty,pnl,reason "
+        "FROM trades WHERE closed IS NOT NULL ORDER BY opened"
+    ).fetchall()
+    details = []
+    for trade_id, opened, closed, direction, entry, exit_price, qty, pnl, reason in rows:
+        gross = ((exit_price-entry) if direction=="LONG" else (entry-exit_price))*qty
+        fees = gross-pnl
+        details.append({"id":trade_id,"opened":opened,"closed":closed,
+            "direction":direction,"entry":entry,"exit":exit_price,"qty":qty,
+            "gross_pnl_eur":round(gross,6),"fees_eur":round(fees,6),
+            "net_pnl_eur":round(pnl,6),"reason":reason})
+    print(json.dumps({"event":"PAPER_TRADE_AUDIT","count":len(details),
+        "total_gross_eur":round(sum(t["gross_pnl_eur"] for t in details),6),
+        "total_fees_eur":round(sum(t["fees_eur"] for t in details),6),
+        "total_net_eur":round(sum(t["net_pnl_eur"] for t in details),6),
+        "trades":details}),flush=True)
+
 def main():
     Path("/data").mkdir(parents=True,exist_ok=True)
     with sqlite3.connect(SHADOW,timeout=30) as shadow, sqlite3.connect(PAPER,timeout=30) as paper:
         initialize(shadow)
         paper_init(paper)
+        emit_closed_trade_audit(paper)
         shadow.execute("CREATE TABLE IF NOT EXISTS signal_diagnostics(candle TEXT PRIMARY KEY, timestamp TEXT, signal TEXT, reasons TEXT, eligible INTEGER)")
         shadow.commit()
         shadow.execute("CREATE TABLE IF NOT EXISTS rejection_audit (candle TEXT PRIMARY KEY, reasons TEXT NOT NULL, eligible INTEGER NOT NULL)")
