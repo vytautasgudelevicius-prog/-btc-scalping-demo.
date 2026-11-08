@@ -129,7 +129,10 @@ def tick(db,report):
             # Require a plausible 2:1 NET reward/risk against structural target.
             target=m15["resistance"] if direction=="LONG" else m15["support"]
             reward=(target-entry if direction=="LONG" else entry-target)
-            # Conservative executable target: include exit slippage and both taker fees.\n            target_fill=target*(1-SLIP) if direction=="LONG" else target*(1+SLIP)\n            gross_target=(target_fill-entry) if direction=="LONG" else (entry-target_fill)\n            reward_net=gross_target-(entry+target_fill)*FEE
+            # Conservative executable target: include exit slippage and both taker fees.
+            target_fill=target*(1-SLIP) if direction=="LONG" else target*(1+SLIP)
+            gross_target=(target_fill-entry) if direction=="LONG" else (entry-target_fill)
+            reward_net=gross_target-(entry+target_fill)*FEE
             if abs(entry-stop)/entry>0.03: reward_net=0
             qty=min(equity*RISK/unit_risk,equity/entry) if reward_net>=2*unit_risk else 0
             if qty>0:
