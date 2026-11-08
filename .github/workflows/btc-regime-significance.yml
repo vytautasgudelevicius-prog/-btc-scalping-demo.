@@ -29,7 +29,7 @@ jobs:
           lines=['# BTC regime statistical significance','',
             '36-month spot proxy; 3000 deterministic bootstrap/random-entry resamples.',
             'Training selection, validation with multiple-testing correction, untouched test only if confirmed.',
-            '',f"Train candidate: {d['train_candidate']}",
+            '', '## All training regimes and sample sizes', *[str(x) for x in d['training_screening']], '',f"Train candidate: {d['train_candidate']}",
             f"Validation: {d['validation']}",
             f"Untouched test: {d['untouched_test']}",
             f"Decision: {d['decision']}"]
