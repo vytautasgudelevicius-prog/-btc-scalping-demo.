@@ -3,6 +3,7 @@ Not Kraken execution data. Fail closed on gaps or insufficient coverage.
 """
 import csv
 import io
+import os
 import urllib.request
 import zipfile
 from datetime import datetime, timezone
@@ -21,7 +22,7 @@ def completed_months(now=None, count=3):
         result.append(f"{year:04d}-{month:02d}")
     return list(reversed(result))
 
-MONTHS = completed_months()
+MONTHS = completed_months(count=int(os.environ.get('BTC_HISTORY_MONTHS', '3')))
 BASE = "https://data.binance.vision/data/spot/monthly/klines/BTCEUR/1m/"
 OUT = Path("research/history_btceur_proxy.csv")
 
