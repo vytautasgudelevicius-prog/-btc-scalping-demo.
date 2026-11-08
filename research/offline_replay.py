@@ -1,0 +1,78 @@
+"""Offline walk-forward replay of completed BTC/EUR observation snapshots.
+
+Input is timestamp-ordered JSONL of historical *point-in-time* observe() reports.
+Do not use retrospectively calculated future indicators; that would leak future data.
+Never connects to Kraken or submits orders. Does not modify Railway databases.
+"""
+import argparse
+import json
+import math
+import sqlite3
+from pathlib import Path
+from research import isolated_paper_experiment as paper
+
+
+def replay(path, fee=None, slip=None):
+    original_fee, original_slip = paper.FEE, paper.SLIP
+    if fee is not None:
+        paper.FEE = fee
+    if slip is not None:
+        paper.SLIP = slip
+    try:
+        with sqlite3.connect(":memory:") as db:
+            paper.init(db)
+            previous = None
+            observations = 0
+            events = {}
+            with Path(path).open(encoding="utf-8") as stream:
+                for line_no, line in enumerate(stream, 1):
+                    if not line.strip():
+                        continue
+                    report = json.loads(line)
+                    stamp = report["timestamp_utc"]
+                    if previous is not None and stamp <= previous:
+                        raise ValueError(f"Non-increasing timestamp at line {line_no}")
+                    previous = stamp
+                    if report.get("orders_enabled") is not False:
+                        raise ValueError("Historical report must be read-only")
+                    result = paper.tick(db, report)
+                    observations += 1
+                    events[result["event"]] = events.get(result["event"], 0) + 1
+            if observations == 0:
+                raise ValueError("No historical observations supplied")
+            rows = db.execute("SELECT pnl FROM trades WHERE closed IS NOT NULL ORDER BY id").fetchall()
+            pnls = [float(x[0]) for x in rows]
+            losses = sum(x for x in pnls if x < 0)
+            gains = sum(x for x in pnls if x > 0)
+            equity = float(paper.get(db, "equity", paper.INITIAL))
+            return {
+                "observations": observations,
+                "closed_trades": len(pnls),
+                "open_trades": db.execute("SELECT COUNT(*) FROM trades WHERE closed IS NULL").fetchone()[0],
+                "wins": sum(x > 0 for x in pnls),
+                "win_rate_pct": round(100 * sum(x > 0 for x in pnls) / len(pnls), 2) if pnls else None,
+                "net_pnl_eur": round(sum(pnls), 2),
+                "equity_eur": round(equity, 2),
+                "profit_factor": round(gains / abs(losses), 3) if losses else (None if not gains else "infinite"),
+                "events": events,
+                "warning": "Offline paper simulation only; no guarantee of real fills or future profit."
+            }
+    finally:
+        paper.FEE, paper.SLIP = original_fee, original_slip
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("snapshots", help="Point-in-time JSONL reports, in chronological order")
+    parser.add_argument("--fee", type=float, default=None, help="One-way fee as fraction (0.008=0.8%)")
+    parser.add_argument("--slip", type=float, default=None, help="One-way slippage fraction")
+    args = parser.parse_args()
+    if args.fee is not None and not 0 <= args.fee < 1:
+        parser.error("--fee must be between 0 and 1")
+    if args.slip is not None and not 0 <= args.slip < 1:
+        parser.error("--slip must be between 0 and 1")
+    print(json.dumps(replay(args.snapshots, args.fee, args.slip), indent=2))
+
+
+if __name__ == "__main__":
+    main()
