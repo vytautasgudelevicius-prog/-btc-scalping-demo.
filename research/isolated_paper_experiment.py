@@ -101,12 +101,12 @@ def tick(db,report):
         false_break=(m5.get("false_break_up",False) or m15.get("false_break_up",False)) if direction=="LONG" else (
             m5.get("false_break_down",False) or m15.get("false_break_down",False)) if direction=="SHORT" else False
         # Recent range is a cost gate, not a price forecast.
-        cost_ok=report["hourly_range_pct"]>=report["estimated_roundtrip_cost_pct"]
+        cost_ok=(report["hourly_range_pct"]>=report["estimated_roundtrip_cost_pct"]*1.25)
         eligible=(direction!="WAIT" and report["spread_pct"]<=MAX_SPREAD_PCT
                   and cost_ok and volume_ok and structure_ok and not rejection and not false_break)
         reasons=[]
         if direction=="WAIT": reasons.append("NO_ALIGNED_TREND")
-        if not cost_ok: reasons.append("COST_EXCEEDS_RECENT_RANGE")
+        if not cost_ok: reasons.append("RANGE_BELOW_125PCT_COST_BUFFER")
         if not volume_ok: reasons.append("LOW_VOLUME")
         if not structure_ok: reasons.append("WEAK_MARKET_STRUCTURE")
         if rejection: reasons.append("REJECTION_WICK")
@@ -129,7 +129,7 @@ def tick(db,report):
             # Require a plausible 2:1 NET reward/risk against structural target.
             target=m15["resistance"] if direction=="LONG" else m15["support"]
             reward=(target-entry if direction=="LONG" else entry-target)
-            reward_net=reward-(entry+target)*FEE
+            # Conservative executable target: include exit slippage and both taker fees.\n            target_fill=target*(1-SLIP) if direction=="LONG" else target*(1+SLIP)\n            gross_target=(target_fill-entry) if direction=="LONG" else (entry-target_fill)\n            reward_net=gross_target-(entry+target_fill)*FEE
             if abs(entry-stop)/entry>0.03: reward_net=0
             qty=min(equity*RISK/unit_risk,equity/entry) if reward_net>=2*unit_risk else 0
             if qty>0:
