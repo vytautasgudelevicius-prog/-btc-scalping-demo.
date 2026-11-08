@@ -39,6 +39,10 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(result["closed_trades"], 0)
         self.assertEqual(result["net_pnl_eur"], 0)
         self.assertEqual(result["equity_eur"], 1000)
+        self.assertEqual(result["max_realized_equity_drawdown_pct"], 0)
+        self.assertEqual(result["longest_losing_streak"], 0)
+        self.assertIsNone(result["average_net_pnl_per_closed_trade_eur"])
+        self.assertEqual(result["first_timestamp"], rows[0]["timestamp_utc"])
 
     def test_reject_out_of_order_history(self):
         r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
