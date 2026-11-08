@@ -33,6 +33,9 @@ jobs:
                       f"Validation selection: {r['selected_on_validation']}",
                       f"Untouched holdout: {r['untouched_holdout']}",
                       f"Verdict: {r['decision']}"]
+              ranked=sorted(r['validation_candidates'].items(),key=lambda kv:kv[1]['net_return_pct'],reverse=True)
+              for key,metrics in ranked[:5]:
+                  lines.append(f"Validation candidate {key}: net {metrics['net_return_pct']}%, versus hold {metrics['excess_vs_buy_hold_pct']}%, entries {metrics['entries']}")
           print('\n'.join(lines))
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
               f.write('\n'.join(lines))
