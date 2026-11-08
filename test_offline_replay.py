@@ -187,6 +187,34 @@ class ReplayTests(unittest.TestCase):
             self.assertLessEqual(
                 db.execute("SELECT stop FROM trades WHERE closed IS NULL").fetchone()[0], tightened)
 
+    def test_break_even_long_locks_cost_buffer_after_favorable_move(self):
+        import sqlite3
+        r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
+        r["bid"], r["ask"] = 110.0, 110.1
+        r["structure"]["5"]["support"] = 80.0
+        with sqlite3.connect(":memory:") as db:
+            paper.init(db)
+            db.execute("INSERT INTO trades(candle,opened,direction,entry,qty,stop) VALUES(?,?,?,?,?,?)",
+                       ("entry", r["timestamp_utc"], "LONG", 100, 0.01, 95))
+            db.commit()
+            self.assertEqual(paper.tick(db, r)["open_positions"], 1)
+            stop = db.execute("SELECT stop FROM trades WHERE closed IS NULL").fetchone()[0]
+            self.assertGreaterEqual(stop, 100 * (1 + 2 * paper.FEE + 2 * paper.SLIP))
+
+    def test_break_even_short_locks_cost_buffer_after_favorable_move(self):
+        import sqlite3
+        r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
+        r["bid"], r["ask"] = 89.9, 90.0
+        r["structure"]["5"]["resistance"] = 120.0
+        with sqlite3.connect(":memory:") as db:
+            paper.init(db)
+            db.execute("INSERT INTO trades(candle,opened,direction,entry,qty,stop) VALUES(?,?,?,?,?,?)",
+                       ("entry", r["timestamp_utc"], "SHORT", 100, 0.01, 105))
+            db.commit()
+            self.assertEqual(paper.tick(db, r)["open_positions"], 1)
+            stop = db.execute("SELECT stop FROM trades WHERE closed IS NULL").fetchone()[0]
+            self.assertLessEqual(stop, 100 * (1 - 2 * paper.FEE - 2 * paper.SLIP))
+
     def test_hourly_aggregation_uses_only_completed_quarters(self):
         from research.build_kraken_replay import hourly_from_fifteen
         bars = [[i * 900, "100", "103", "98", str(100+i), "0", "2"]
