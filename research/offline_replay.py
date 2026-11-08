@@ -22,7 +22,11 @@ def replay(path, fee=None, slip=None):
         with sqlite3.connect(":memory:") as db:
             paper.init(db)
             previous = None
+            first_timestamp = None
+            last_timestamp = None
             observations = 0
+            peak = paper.INITIAL
+            max_drawdown = 0.0
             events = {}
             with Path(path).open(encoding="utf-8") as stream:
                 for line_no, line in enumerate(stream, 1):
@@ -33,9 +37,15 @@ def replay(path, fee=None, slip=None):
                     if previous is not None and stamp <= previous:
                         raise ValueError(f"Non-increasing timestamp at line {line_no}")
                     previous = stamp
+                    if first_timestamp is None:
+                        first_timestamp = stamp
+                    last_timestamp = stamp
                     if report.get("orders_enabled") is not False:
                         raise ValueError("Historical report must be read-only")
                     result = paper.tick(db, report)
+                    current_equity = float(paper.get(db, "equity", paper.INITIAL))
+                    peak = max(peak, current_equity)
+                    max_drawdown = max(max_drawdown, (peak-current_equity)/peak * 100)
                     observations += 1
                     events[result["event"]] = events.get(result["event"], 0) + 1
             if observations == 0:
@@ -45,17 +55,27 @@ def replay(path, fee=None, slip=None):
             losses = sum(x for x in pnls if x < 0)
             gains = sum(x for x in pnls if x > 0)
             equity = float(paper.get(db, "equity", paper.INITIAL))
+            consecutive_losses = 0
+            longest_losing_streak = 0
+            for pnl in pnls:
+                consecutive_losses = consecutive_losses + 1 if pnl < 0 else 0
+                longest_losing_streak = max(longest_losing_streak, consecutive_losses)
             return {
+                "first_timestamp": first_timestamp,
+                "last_timestamp": last_timestamp,
                 "observations": observations,
                 "closed_trades": len(pnls),
                 "open_trades": db.execute("SELECT COUNT(*) FROM trades WHERE closed IS NULL").fetchone()[0],
                 "wins": sum(x > 0 for x in pnls),
                 "win_rate_pct": round(100 * sum(x > 0 for x in pnls) / len(pnls), 2) if pnls else None,
                 "net_pnl_eur": round(sum(pnls), 2),
+                "average_net_pnl_per_closed_trade_eur": round(sum(pnls)/len(pnls), 2) if pnls else None,
+                "max_realized_equity_drawdown_pct": round(max_drawdown, 3),
+                "longest_losing_streak": longest_losing_streak,
                 "equity_eur": round(equity, 2),
                 "profit_factor": round(gains / abs(losses), 3) if losses else (None if not gains else "infinite"),
                 "events": events,
-                "warning": "Offline paper simulation only; no guarantee of real fills or future profit."
+                "warning": "Realized-equity drawdown excludes open unrealized PnL. Offline paper simulation; no guarantee of fills or future profit."
             }
     finally:
         paper.FEE, paper.SLIP = original_fee, original_slip
