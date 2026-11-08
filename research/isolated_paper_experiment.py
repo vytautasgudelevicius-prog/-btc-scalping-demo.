@@ -22,6 +22,7 @@ def init(db):
       direction TEXT, entry REAL, qty REAL, stop REAL, exit REAL,
       pnl REAL, reason TEXT)""")
     db.execute("CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT)")
+    db.execute("CREATE TABLE IF NOT EXISTS decisions (candle TEXT PRIMARY KEY, timestamp TEXT, direction TEXT, eligible INTEGER, reason TEXT, spread_pct REAL, estimated_cost_pct REAL)")
     db.commit()
 
 def get(db,key,default):
@@ -80,8 +81,26 @@ def tick(db,report):
         short_ok=(m5["ema9"]<m5["ema21"] and m15["ema9"]<m15["ema21"]
                   and m5["close"]<m5["resistance"] and m15["close"]<m15["resistance"])
         direction="LONG" if long_ok else ("SHORT" if short_ok else "WAIT")
+        # Volume confirmation and candle rejection: avoid thin, exhausted moves.
+        volume_ok=m5.get("volume_ratio",0)>=0.8
+        structure_ok=(m5.get("higher_lows",False) if direction=="LONG" else
+                      m5.get("lower_highs",False) if direction=="SHORT" else False)
+        rejection=(m5.get("upper_wick_ratio",0)>0.6 if direction=="LONG" else
+                   m5.get("lower_wick_ratio",0)>0.6 if direction=="SHORT" else True)
+        cost_ok=report["hourly_range_pct"]>=report["estimated_roundtrip_cost_pct"]
         eligible=(direction!="WAIT" and report["spread_pct"]<=MAX_SPREAD_PCT
-                  and report["hourly_range_pct"]>=report["estimated_roundtrip_cost_pct"])
+                  and cost_ok and volume_ok and structure_ok and not rejection)
+        reasons=[]
+        if direction=="WAIT": reasons.append("NO_ALIGNED_TREND")
+        if not cost_ok: reasons.append("COST_EXCEEDS_RECENT_RANGE")
+        if not volume_ok: reasons.append("LOW_VOLUME")
+        if not structure_ok: reasons.append("WEAK_MARKET_STRUCTURE")
+        if rejection: reasons.append("REJECTION_WICK")
+        if report["spread_pct"]>MAX_SPREAD_PCT: reasons.append("SPREAD")
+        db.execute("INSERT OR IGNORE INTO decisions VALUES(?,?,?,?,?,?,?)",
+                   (report["last_completed_candle"],now.isoformat(),direction,int(eligible),
+                    ",".join(reasons) or "ELIGIBLE",report["spread_pct"],
+                    report["estimated_roundtrip_cost_pct"]))
         halted=equity<=day_start*(1-DAILY_LIMIT)
         if eligible and not halted and equity>0:
             entry=ask*(1+SLIP) if direction=="LONG" else bid*(1-SLIP)
@@ -89,7 +108,10 @@ def tick(db,report):
             stop=min(entry*(1-STOP_PCT),structural) if direction=="LONG" else max(entry*(1+STOP_PCT),structural)
             # Risk includes worst-case stop execution plus two taker fees.
             unit_risk=abs(entry-stop)+(entry+stop)*FEE
-            qty=min(equity*RISK/unit_risk,equity/entry)
+            # Require a plausible 2:1 gross reward/risk against structural target.
+            target=m15["resistance"] if direction=="LONG" else m15["support"]
+            reward=(target-entry if direction=="LONG" else entry-target)
+            qty=min(equity*RISK/unit_risk,equity/entry) if reward>=2*unit_risk else 0
             if qty>0:
                 cur=db.execute("""INSERT OR IGNORE INTO trades(candle,opened,direction,entry,qty,stop)
                                    VALUES(?,?,?,?,?,?)""",
