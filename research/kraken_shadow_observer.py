@@ -44,7 +44,18 @@ def observe(fetch=api):
         volumes=[float(b[6]) for b in recent]
         body=abs(float(bars[-1][4])-float(bars[-1][1]))
         candle_range=max(float(bars[-1][2])-float(bars[-1][3]),1e-9)
+        # A breakout that closes back inside the previous completed-bar range
+        # is a potential liquidity sweep, not a confirmed continuation.
+        prior_high=max(highs_tf[-13:-1])
+        prior_low=min(lows_tf[-13:-1])
+        last_open=float(bars[-1][1])
+        last_close=closes_tf[-1]
+        false_break_up=(highs_tf[-1]>prior_high and last_close<prior_high
+                        and last_close<last_open)
+        false_break_down=(lows_tf[-1]<prior_low and last_close>prior_low
+                          and last_close>last_open)
         structure[str(interval)]={"close":closes_tf[-1],"ema9":e9,"ema21":e21,
+            "false_break_up":false_break_up,"false_break_down":false_break_down,
             "volume_ratio":volumes[-1]/max(sum(volumes[:-1])/len(volumes[:-1]),1e-9),
             "body_ratio":body/candle_range,
             "upper_wick_ratio":(float(bars[-1][2])-max(float(bars[-1][1]),float(bars[-1][4])))/candle_range,
