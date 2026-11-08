@@ -51,6 +51,36 @@ class ReplayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "read-only"):
             self.run_replay([r])
 
+    def test_false_breakout_blocks_entry(self):
+        import sqlite3
+        r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
+        for timeframe in ("5", "15"):
+            r["structure"][timeframe].update(
+                {"ema9": 102.0, "ema21": 100.0, "close": 103.0,
+                 "support": 95.0, "resistance": 140.0,
+                 "higher_lows": True})
+        r["hourly_range_pct"] = 3.0
+        r["structure"]["5"]["false_break_up"] = True
+        with sqlite3.connect(":memory:") as db:
+            paper.init(db)
+            result = paper.tick(db, r)
+            self.assertEqual(result["open_positions"], 0)
+            reasons = db.execute("SELECT reason FROM decisions").fetchone()[0]
+            self.assertIn("FALSE_BREAKOUT", reasons)
+
+    def test_daily_loss_halt_preserves_equity(self):
+        import sqlite3
+        r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
+        with sqlite3.connect(":memory:") as db:
+            paper.init(db)
+            paper.put(db, "equity", 950)
+            paper.put(db, "day", "2026-11-01")
+            paper.put(db, "day_start_equity", 1000)
+            db.commit()
+            result = paper.tick(db, r)
+            self.assertEqual(result["event"], "DAILY_LOSS_HALT")
+            self.assertEqual(result["equity_eur"], 950)
+
     def test_fee_override_restored(self):
         original = paper.FEE
         r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
