@@ -1,0 +1,44 @@
+name: BTC spot regime versus hold
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'research/spot_regime_vs_hold.py'
+      - '.github/workflows/btc-spot-regime.yml'
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download completed BTC/EUR spot history
+        env:
+          BTC_HISTORY_MONTHS: '12'
+        run: python research/fetch_proxy_history.py
+      - name: Compare long-flat trend strategy to buy-and-hold
+        run: |
+          python research/spot_regime_vs_hold.py research/history_btceur_proxy.csv > spot_regime.json
+          python - <<'PY'
+          import json,os
+          data=json.load(open('spot_regime.json'))
+          lines=['# BTC spot long-flat trend versus buy-and-hold','','Research only; no automatic deployment.']
+          for name,r in data.items():
+              lines+=['',f'## {name}',f"Bars: {r['bars']}",
+                      f"Roundtrip costs: {r['roundtrip_cost_pct']}%",
+                      f"Validation selection: {r['selected_on_validation']}",
+                      f"Untouched holdout: {r['untouched_holdout']}",
+                      f"Verdict: {r['decision']}"]
+          print('\n'.join(lines))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-spot-regime-research
+          path: spot_regime.json
