@@ -95,6 +95,13 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(hourly[0][4], "103")
         self.assertEqual(hourly[0][6], 8)
 
+    def test_cost_scenario_changes_entry_gate_without_mutating_input(self):
+        r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
+        original_cost = r["estimated_roundtrip_cost_pct"]
+        result = self.run_replay([r], fee=0.001, slip=0.0)
+        self.assertEqual(result["observations"], 1)
+        self.assertEqual(r["estimated_roundtrip_cost_pct"], original_cost)
+
     def test_fee_override_restored(self):
         original = paper.FEE
         r = report("2026-11-01T10:00:00+00:00", "2026-11-01T09:59:00+00:00")
