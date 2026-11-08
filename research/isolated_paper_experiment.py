@@ -54,9 +54,9 @@ def tick(db,report):
         exit_quote=bid*(1-SLIP) if direction=="LONG" else ask*(1+SLIP)
         # Do not interpret one adverse candle as a reversal.
         reversal=(m5["ema9"]<m5["ema21"] and m15["ema9"]<m15["ema21"]
-                  and m5["close"]<m5["support"] and m15["close"]<m15["support"]) if direction=="LONG" else (
+                  and m5["close"]<m5["previous_support"] and m15["close"]<m15["previous_support"]) if direction=="LONG" else (
                   m5["ema9"]>m5["ema21"] and m15["ema9"]>m15["ema21"]
-                  and m5["close"]>m5["resistance"] and m15["close"]>m15["resistance"])
+                  and m5["close"]>m5["previous_resistance"] and m15["close"]>m15["previous_resistance"])
         # Tighten only; never loosen a protective stop.
         if direction=="LONG":
             candidate=m5["support"]*(1-0.001)
@@ -87,6 +87,7 @@ def tick(db,report):
                       m5.get("lower_highs",False) if direction=="SHORT" else False)
         rejection=(m5.get("upper_wick_ratio",0)>0.6 if direction=="LONG" else
                    m5.get("lower_wick_ratio",0)>0.6 if direction=="SHORT" else True)
+        # Recent range is a cost gate, not a price forecast.
         cost_ok=report["hourly_range_pct"]>=report["estimated_roundtrip_cost_pct"]
         eligible=(direction!="WAIT" and report["spread_pct"]<=MAX_SPREAD_PCT
                   and cost_ok and volume_ok and structure_ok and not rejection)
@@ -111,7 +112,9 @@ def tick(db,report):
             # Require a plausible 2:1 gross reward/risk against structural target.
             target=m15["resistance"] if direction=="LONG" else m15["support"]
             reward=(target-entry if direction=="LONG" else entry-target)
-            qty=min(equity*RISK/unit_risk,equity/entry) if reward>=2*unit_risk else 0
+            reward_net=reward-(entry+target)*FEE
+            if abs(entry-stop)/entry>0.03: reward_net=0
+            qty=min(equity*RISK/unit_risk,equity/entry) if reward_net>=2*unit_risk else 0
             if qty>0:
                 cur=db.execute("""INSERT OR IGNORE INTO trades(candle,opened,direction,entry,qty,stop)
                                    VALUES(?,?,?,?,?,?)""",
