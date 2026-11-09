@@ -26,7 +26,14 @@ def run(path,fee=.0005,slip=.0002,stop_pct=.0025,rr=1.5,max_hold=120):
         peak=max(peak,equity);max_dd=max(max_dd,(peak-equity)/peak*100)
         active=None
     for i,r in enumerate(reports):
-        stamp=r["timestamp_utc"];dte=datetime.fromisoformat(stamp).date()
+        stamp=r["timestamp_utc"];current_dt=datetime.fromisoformat(stamp);dte=current_dt.date()
+        if i and (current_dt-datetime.fromisoformat(reports[i-1]["timestamp_utc"])).total_seconds()!=60:
+            # A missing candle means stop/target order is unknown during the gap.
+            # Cancel pending entries; close exposed positions at the first available
+            # opening price, conservatively including execution costs.
+            pending=None
+            if active:close(active,r["minute_ohlc"]["open"],stamp,"DATA_GAP")
+            reject("missing_minute_gap")
         if dte!=day:day=dte;day_equity=equity
         candle=r["minute_ohlc"]
         if active:
