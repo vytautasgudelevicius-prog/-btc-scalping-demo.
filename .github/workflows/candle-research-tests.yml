@@ -48,3 +48,5 @@ jobs:
           python -m research.diagnose_entry_gate /tmp/kraken_snapshots.jsonl --fee 0.0005
           echo '=== Diagnostic only: zero fee theoretical upper bound ==='
           python -m research.diagnose_entry_gate /tmp/kraken_snapshots.jsonl --fee 0
+          echo '=== Sensitivity: zero fee and zero slippage, theoretical ceiling ==='
+          python -m research.diagnose_entry_gate /tmp/kraken_snapshots.jsonl --fee 0 --slip 0
