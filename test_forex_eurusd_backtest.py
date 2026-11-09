@@ -49,6 +49,15 @@ class ForexResearchTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(reason,'stale_or_gapped_data')
 
+    def test_compare_short_holding_windows(self):
+        bars=self.bars()
+        for minutes in (1,2,3,4,5,10):
+            result=simulate(bars, max_holding_bars=minutes)
+            self.assertEqual(result['max_holding_minutes'],minutes)
+            self.assertIn('net_pnl_eur',result)
+        with self.assertRaises(ValueError):
+            simulate(bars,max_holding_bars=0)
+
     def test_reports_risk_controls(self):
         result=simulate(self.bars())
         self.assertEqual(result['max_consecutive_losses'],5)
