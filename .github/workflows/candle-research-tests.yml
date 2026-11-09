@@ -42,3 +42,9 @@ jobs:
           echo '=== Sensitivity: reduced fee 0.2% per side ==='
           python -m research.offline_replay /tmp/kraken_snapshots.jsonl --fee 0.002
           python -m research.diagnose_entry_gate /tmp/kraken_snapshots.jsonl --fee 0.002
+          echo '=== Diagnostic only: fee 0.1% one-way ==='
+          python -m research.diagnose_entry_gate /tmp/kraken_snapshots.jsonl --fee 0.001
+          echo '=== Diagnostic only: fee 0.05% one-way ==='
+          python -m research.diagnose_entry_gate /tmp/kraken_snapshots.jsonl --fee 0.0005
+          echo '=== Diagnostic only: zero fee theoretical upper bound ==='
+          python -m research.diagnose_entry_gate /tmp/kraken_snapshots.jsonl --fee 0
