@@ -1,0 +1,34 @@
+name: Kraken 90-day independent BTC-EUR backtest
+on:
+  workflow_dispatch:
+jobs:
+  long-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download official Kraken Q3 2026 OHLCVT archive
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 30 --max-time 900 -o /tmp/kraken_q3.zip https://assets.kraken.com/marketing/institutions/Kraken_OHLCVT_2026Q3.zip
+          unzip -t /tmp/kraken_q3.zip | tail -2
+      - name: Build 90-day point-in-time BTC-EUR signals
+        run: |
+          python -m research.kraken_bulk_replay /tmp/kraken_q3.zip --days 90 --output /tmp/kraken_90d.jsonl
+      - name: Evaluate fixed fee, stop and net risk/reward on chronological holdout
+        run: |
+          python -m research.holdout_backtest /tmp/kraken_90d.jsonl | tee /tmp/kraken_holdout_results.json
+          echo '### Kraken 90-day BTC/EUR independent test' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Fixed fee 0.05% each side, 0.25% minimum stop, 1.5 net R. Synthetic 0.05% spread and 0.02% slippage each side.' >> "$GITHUB_STEP_SUMMARY"
+          python -c "import json; d=json.load(open('/tmp/kraken_holdout_results.json')); print('| Segment | Trades | Wins | Net EUR | Max DD % |\n|---|---:|---:|---:|---:|'); [print('| %s | %s | %s | %s | %s |'%(k,d[k]['closed_trades'],d[k]['wins'],d[k]['net_pnl_eur'],d[k]['max_realized_drawdown_pct'])) for k in ('development','untouched_holdout')]" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kraken-90d-holdout-results
+          path: /tmp/kraken_holdout_results.json
+          if-no-files-found: ignore
+          retention-days: 14
