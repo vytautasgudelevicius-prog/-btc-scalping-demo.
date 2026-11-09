@@ -49,7 +49,7 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
         if position is None and direction and now[0].weekday() < 5 and 12 <= now[0].hour < 16 and i-last_exit >= 10:
             entry_mid = nxt[1]
             stop_pips = max(8.0, (max(b[2] for b in bars[i-13:i+1]) - min(b[3] for b in bars[i-13:i+1])) / pip)
-            take_pips = 1.5*stop_pips
+            take_pips = 2.0*stop_pips
             # Roundtrip friction, in pips, including USD-to-EUR conversion for commissions.
             roundtrip_pips = spread_pips + 2*slippage_pips + 2*commission_eur_per_100k_side*entry_mid/10
             if take_pips <= roundtrip_pips + 1.5*(stop_pips + roundtrip_pips):
