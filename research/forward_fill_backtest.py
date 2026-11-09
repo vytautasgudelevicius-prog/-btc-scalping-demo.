@@ -20,9 +20,11 @@ def run(path,fee=.0005,slip=.0002,stop_pct=.0025,rr=1.5,max_hold=120):
         d=position["direction"]
         exit_px=raw*(1-slip)*(1-.00025) if d=="LONG" else raw*(1+slip)*(1+.00025)
         pnl=(exit_px-position["entry"])*position["qty"] if d=="LONG" else (position["entry"]-exit_px)*position["qty"]
-        pnl-=(exit_px+position["entry"])*position["qty"]*fee
+        gross_pnl=pnl
+        commission=(exit_px+position["entry"])*position["qty"]*fee
+        pnl-=commission
         equity+=pnl
-        trades.append({"entry_time":position["time"],"exit_time":stamp,"direction":d,"pnl_eur":round(pnl,5),"exit_reason":reason})
+        trades.append({"entry_time":position["time"],"exit_time":stamp,"direction":d,"pnl_eur":round(pnl,5),"exit_reason":reason,"gross_pnl_before_commission_eur":round(gross_pnl,5),"commission_eur":round(commission,5),"entry_price":round(position["entry"],5),"exit_price":round(exit_px,5)})
         peak=max(peak,equity);max_dd=max(max_dd,(peak-equity)/peak*100)
         active=None
     for i,r in enumerate(reports):
@@ -86,7 +88,16 @@ def run(path,fee=.0005,slip=.0002,stop_pct=.0025,rr=1.5,max_hold=120):
     if active:close(active,reports[-1]["minute_ohlc"]["close"],reports[-1]["timestamp_utc"],"END_OF_DATA")
     gains=sum(t["pnl_eur"] for t in trades if t["pnl_eur"]>0)
     losses=sum(t["pnl_eur"] for t in trades if t["pnl_eur"]<0)
-    return {"first":reports[0]["timestamp_utc"],"last":reports[-1]["timestamp_utc"],"observations":len(reports),"fee_one_way":fee,"slippage_one_way":slip,"minimum_stop_pct":stop_pct*100,"required_net_rr":rr,"closed_trades":len(trades),"wins":sum(t["pnl_eur"]>0 for t in trades),"net_pnl_eur":round(sum(t["pnl_eur"] for t in trades),4),"equity_eur":round(equity,4),"max_realized_drawdown_pct":round(max_dd,3),"profit_factor":round(gains/abs(losses),3) if losses else None,"rejected":rejects,"trades":trades,"limitations":"Only ~10h rolling Kraken OHLC; synthetic spread, no intrabar sequencing; stop-first conservative, no guarantee of fills or future returns."}
+    by_reason={}
+    for t in trades:
+        x=by_reason.setdefault(t["exit_reason"],{"trades":0,"wins":0,"net_pnl_eur":0.,"gross_before_commission_eur":0.,"commission_eur":0.})
+        x["trades"]+=1;x["wins"]+=int(t["pnl_eur"]>0)
+        x["net_pnl_eur"]+=t["pnl_eur"]
+        x["gross_before_commission_eur"]+=t["gross_pnl_before_commission_eur"]
+        x["commission_eur"]+=t["commission_eur"]
+    for x in by_reason.values():
+        for k in ("net_pnl_eur","gross_before_commission_eur","commission_eur"):x[k]=round(x[k],4)
+    return {"exit_breakdown":by_reason,"total_commission_eur":round(sum(t["commission_eur"] for t in trades),4),"first":reports[0]["timestamp_utc"],"last":reports[-1]["timestamp_utc"],"observations":len(reports),"fee_one_way":fee,"slippage_one_way":slip,"minimum_stop_pct":stop_pct*100,"required_net_rr":rr,"closed_trades":len(trades),"wins":sum(t["pnl_eur"]>0 for t in trades),"net_pnl_eur":round(sum(t["pnl_eur"] for t in trades),4),"equity_eur":round(equity,4),"max_realized_drawdown_pct":round(max_dd,3),"profit_factor":round(gains/abs(losses),3) if losses else None,"rejected":rejects,"trades":trades,"limitations":"Historical OHLC sample length is reported by first/last; synthetic spread and assumed fee tier, no intrabar sequencing; stop-first conservative, no guarantee of fills or future returns."}
 
 if __name__=="__main__":
     a=argparse.ArgumentParser()
