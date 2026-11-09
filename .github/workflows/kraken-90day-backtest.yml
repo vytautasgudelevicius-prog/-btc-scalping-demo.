@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/kraken-90day-backtest.yml'
+      - 'research/forward_fill_backtest.py'
   workflow_dispatch:
 jobs:
   long-history:
