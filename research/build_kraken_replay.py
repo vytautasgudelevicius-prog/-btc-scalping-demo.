@@ -93,6 +93,7 @@ def build(output):
                 "timestamp_utc": datetime.fromtimestamp(t, timezone.utc).isoformat(),
                 "last_completed_candle": datetime.fromtimestamp(int(candle[0]), timezone.utc).isoformat(),
                 "pair": "BTC/EUR", "bid": bid, "ask": ask,
+                "minute_ohlc": {"open": float(candle[1]), "high": float(candle[2]), "low": float(candle[3]), "close": price},
                 "spread_pct": (ask-bid)/ask*100,
                 "estimated_roundtrip_cost_pct": 200*(FEE+SLIP)+(ask-bid)/ask*100,
                 "hourly_range_pct": (high/low-1)*100,
