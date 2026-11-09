@@ -9,7 +9,7 @@ import json
 import sys
 from datetime import datetime, timezone
 
-INITIAL_EUR = 1000.0
+INITIAL_EUR = 100.0
 
 def load_bars(path):
     with open(path, newline="") as f:
@@ -36,17 +36,26 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
     curve = [cash]
     rejected_costs = 0
     last_exit = -20
+    consecutive_losses = 0
+    day = None
+    day_start = cash
+    halted_days = set()
     # EUR/USD: one pip is 0.0001 USD per EUR.
     pip = .0001
     for i in range(200, len(bars)-1):
         now, nxt = bars[i], bars[i+1]
+        today = now[0].date()
+        if today != day:
+            day = today
+            day_start = cash
+            consecutive_losses = 0
         closes = [b[4] for b in bars[i-49:i+1]]
         mean_fast = sum(closes[-20:])/20
         mean_slow = sum(closes)/50
         # Completed bar determines direction, next bar open determines fill.
         direction = 1 if mean_fast > mean_slow * 1.00015 else -1 if mean_fast < mean_slow * .99985 else 0
         # Avoid weekends, and only trade liquid London/NY overlap (UTC).
-        if position is None and direction and now[0].weekday() < 5 and 12 <= now[0].hour < 16 and i-last_exit >= 10:
+        if position is None and direction and now[0].weekday() < 5 and 12 <= now[0].hour < 16 and i-last_exit >= 10 and cash > day_start*.98 and consecutive_losses < 5:
             entry_mid = nxt[1]
             stop_pips = max(8.0, (max(b[2] for b in bars[i-13:i+1]) - min(b[3] for b in bars[i-13:i+1])) / pip)
             take_pips = 2.0*stop_pips
@@ -74,6 +83,7 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
                 pnl = gross_eur-spread_slip_eur-commissions
                 cash += pnl
                 trades.append(pnl)
+                consecutive_losses = consecutive_losses+1 if pnl < 0 else 0
                 position = None
                 last_exit = i
         curve.append(cash)
@@ -92,6 +102,8 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
     return {"trades":len(trades),"net_pnl_eur":round(cash-INITIAL_EUR,4),
             "win_rate_pct":round(100*sum(x>0 for x in trades)/len(trades),2) if trades else None,
             "max_drawdown_pct":round(100*dd,4),"rejected_costs":rejected_costs,
+            "initial_capital_eur":INITIAL_EUR,"daily_loss_limit_eur":2.0,
+            "risk_per_trade_eur_initial":0.5,"max_consecutive_losses":5,
             "status":"RESEARCH_ONLY_NO_BROKER_ORDERS"}
 
 if __name__ == "__main__":
