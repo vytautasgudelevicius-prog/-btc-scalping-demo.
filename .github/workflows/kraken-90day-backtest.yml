@@ -1,5 +1,8 @@
 name: Kraken 90-day independent BTC-EUR backtest
 on:
+  push:
+    paths:
+      - '.github/workflows/kraken-90day-backtest.yml'
   workflow_dispatch:
 jobs:
   long-history:
