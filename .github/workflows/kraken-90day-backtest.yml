@@ -6,6 +6,7 @@ on:
       - 'research/forward_fill_backtest.py'
       - 'research/holdout_backtest.py'
       - 'research/development_entry_filter_study.py'
+      - 'research/development_loss_diagnostics.py'
       - 'tests/test_historical_fills.py'
   workflow_dispatch:
 jobs:
@@ -31,6 +32,8 @@ jobs:
           python -m research.holdout_backtest /tmp/kraken_90d.jsonl | tee /tmp/kraken_holdout_results.json
           echo '=== Development-only entry filter comparison ==='
           python -m research.development_entry_filter_study /tmp/kraken_90d.jsonl
+          echo '=== Development-only loss breakdown by direction and UTC hour ==='
+          python -m research.development_loss_diagnostics /tmp/kraken_90d.jsonl
           echo '### Kraken 90-day BTC/EUR independent test' >> "$GITHUB_STEP_SUMMARY"
           echo 'Fixed fee 0.05% each side, 0.25% minimum stop, 1.5 net R. Synthetic 0.05% spread and 0.02% slippage each side.' >> "$GITHUB_STEP_SUMMARY"
           python -c "import json; d=json.load(open('/tmp/kraken_holdout_results.json')); print('| Segment | Trades | Wins | Net EUR | Max DD % |\n|---|---:|---:|---:|---:|'); [print('| %s | %s | %s | %s | %s |'%(k,d[k]['closed_trades'],d[k]['wins'],d[k]['net_pnl_eur'],d[k]['max_realized_drawdown_pct'])) for k in ('development','untouched_holdout')]" >> "$GITHUB_STEP_SUMMARY"
