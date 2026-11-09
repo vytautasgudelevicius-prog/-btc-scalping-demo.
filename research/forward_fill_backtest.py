@@ -9,7 +9,7 @@ import argparse,json
 from datetime import datetime
 from research import isolated_paper_experiment as p
 
-def run(path,fee=.0005,slip=.0002,stop_pct=.0025,rr=1.5,max_hold=120):
+def run(path,fee=.0005,slip=.0002,stop_pct=.0025,rr=1.5,max_hold=120,min_volume=.8,min_trend_gap_pct=0.):
     reports=[json.loads(s) for s in open(path,encoding="utf-8") if s.strip()]
     if not reports or any("minute_ohlc" not in x for x in reports):
         raise ValueError("Historical completed minute OHLC required")
@@ -94,7 +94,7 @@ def run(path,fee=.0005,slip=.0002,stop_pct=.0025,rr=1.5,max_hold=120):
         struct=m5.get("higher_lows",False) if direction=="LONG" else m5.get("lower_highs",False)
         wick=m5.get("upper_wick_ratio",0)>.6 if direction=="LONG" else m5.get("lower_wick_ratio",0)>.6
         false=(m5.get("false_break_up",False) or m15.get("false_break_up",False)) if direction=="LONG" else (m5.get("false_break_down",False) or m15.get("false_break_down",False))
-        if not (struct and not wick and not false and m5.get("volume_ratio",0)>=.8 and r["spread_pct"]<=p.MAX_SPREAD_PCT and r["hourly_range_pct"]>=1.25*(200*(fee+slip)+r["spread_pct"])):continue
+        if not (struct and not wick and not false and m5.get("volume_ratio",0)>=min_volume and abs(m5["ema9"]-m5["ema21"])/m5["close"]*100>=min_trend_gap_pct and abs(m15["ema9"]-m15["ema21"])/m15["close"]*100>=min_trend_gap_pct and r["spread_pct"]<=p.MAX_SPREAD_PCT and r["hourly_range_pct"]>=1.25*(200*(fee+slip)+r["spread_pct"])):continue
         pending={"direction":direction,"structural":m5["support"]*(1-.001) if direction=="LONG" else m5["resistance"]*(1+.001),"target":m15["resistance"] if direction=="LONG" else m15["support"]}
     if active:close(active,reports[-1]["minute_ohlc"]["close"],reports[-1]["timestamp_utc"],"END_OF_DATA")
     gains=sum(t["pnl_eur"] for t in trades if t["pnl_eur"]>0)
@@ -108,7 +108,7 @@ def run(path,fee=.0005,slip=.0002,stop_pct=.0025,rr=1.5,max_hold=120):
         x["commission_eur"]+=t["commission_eur"]
     for x in by_reason.values():
         for k in ("net_pnl_eur","gross_before_commission_eur","commission_eur"):x[k]=round(x[k],4)
-    return {"exit_breakdown":by_reason,"total_commission_eur":round(sum(t["commission_eur"] for t in trades),4),"first":reports[0]["timestamp_utc"],"last":reports[-1]["timestamp_utc"],"observations":len(reports),"fee_one_way":fee,"slippage_one_way":slip,"minimum_stop_pct":stop_pct*100,"required_net_rr":rr,"closed_trades":len(trades),"wins":sum(t["pnl_eur"]>0 for t in trades),"net_pnl_eur":round(sum(t["pnl_eur"] for t in trades),4),"equity_eur":round(equity,4),"max_realized_drawdown_pct":round(max_dd,3),"profit_factor":round(gains/abs(losses),3) if losses else None,"rejected":rejects,"trades":trades,"limitations":"Historical OHLC sample length is reported by first/last; synthetic spread and assumed fee tier, no intrabar sequencing; stop-first conservative, no guarantee of fills or future returns."}
+    return {"exit_breakdown":by_reason,"total_commission_eur":round(sum(t["commission_eur"] for t in trades),4),"first":reports[0]["timestamp_utc"],"last":reports[-1]["timestamp_utc"],"observations":len(reports),"min_volume":min_volume,"min_trend_gap_pct":min_trend_gap_pct,"fee_one_way":fee,"slippage_one_way":slip,"minimum_stop_pct":stop_pct*100,"required_net_rr":rr,"closed_trades":len(trades),"wins":sum(t["pnl_eur"]>0 for t in trades),"net_pnl_eur":round(sum(t["pnl_eur"] for t in trades),4),"equity_eur":round(equity,4),"max_realized_drawdown_pct":round(max_dd,3),"profit_factor":round(gains/abs(losses),3) if losses else None,"rejected":rejects,"trades":trades,"limitations":"Historical OHLC sample length is reported by first/last; synthetic spread and assumed fee tier, no intrabar sequencing; stop-first conservative, no guarantee of fills or future returns."}
 
 if __name__=="__main__":
     a=argparse.ArgumentParser()
