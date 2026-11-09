@@ -73,6 +73,17 @@ def run(path,fee=.0005,slip=.0002,stop_pct=.0025,rr=1.5,max_hold=120):
             qty=min(equity*.005/risk,equity/entry)
             if qty<=0:reject("zero_quantity");continue
             active={"direction":direction,"entry":entry,"stop":stop,"target":target,"qty":qty,"time":stamp,"bars":0}
+            # The entry minute can hit the stop or target after its opening fill.
+            # Conservatively treat both touched as a stop, including gap-through.
+            if direction=="LONG":
+                hit_stop=candle["low"]<=stop;hit_target=candle["high"]>=target
+            else:
+                hit_stop=candle["high"]>=stop;hit_target=candle["low"]<=target
+            if hit_stop:
+                adverse=min(stop,op) if direction=="LONG" else max(stop,op)
+                close(active,adverse,stamp,"ENTRY_BAR_STOP")
+            elif hit_target:
+                close(active,target,stamp,"ENTRY_BAR_TARGET")
             continue
         if active or pending or i>=len(reports)-1:continue
         m5,m15=r["structure"]["5"],r["structure"]["15"]
