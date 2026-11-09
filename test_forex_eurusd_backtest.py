@@ -31,6 +31,7 @@ class ForexResearchTests(unittest.TestCase):
 
     def test_market_gate_rejects_quiet_market(self):
         bars=self.bars(trending=False)
+        bars=[(t,o,o,o,o) for t,o,_,_,_ in bars]
         ok,reason,_=scalp_market_gate(bars,250,spread_pips=1,slippage_pips=.2,commission_eur_per_100k_side=3.5)
         self.assertFalse(ok)
         self.assertEqual(reason,'too_quiet')
