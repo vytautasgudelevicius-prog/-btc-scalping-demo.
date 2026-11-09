@@ -1,5 +1,10 @@
 name: BTC EUR historical research
 on:
+  pull_request:
+    paths:
+      - 'bot.py'
+      - 'test_entry_halt_diagnostics.py'
+      - '.github/workflows/btc-eur-research.yml'
   push:
     paths:
       - 'research/fetch_proxy_history.py'
