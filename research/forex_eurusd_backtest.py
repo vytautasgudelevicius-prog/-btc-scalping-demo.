@@ -40,6 +40,7 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
     day = None
     day_start = cash
     halted_days = set()
+    max_positions = 1
     # EUR/USD: one pip is 0.0001 USD per EUR.
     pip = .0001
     for i in range(200, len(bars)-1):
@@ -49,13 +50,15 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
             day = today
             day_start = cash
             consecutive_losses = 0
+        if cash <= day_start*.98 or consecutive_losses >= 5:
+            halted_days.add(today)
         closes = [b[4] for b in bars[i-49:i+1]]
         mean_fast = sum(closes[-20:])/20
         mean_slow = sum(closes)/50
         # Completed bar determines direction, next bar open determines fill.
         direction = 1 if mean_fast > mean_slow * 1.00015 else -1 if mean_fast < mean_slow * .99985 else 0
         # Avoid weekends, and only trade liquid London/NY overlap (UTC).
-        if position is None and direction and now[0].weekday() < 5 and 12 <= now[0].hour < 16 and i-last_exit >= 10 and cash > day_start*.98 and consecutive_losses < 5:
+        if position is None and direction and now[0].weekday() < 5 and 12 <= now[0].hour < 16 and i-last_exit >= 10 and today not in halted_days:
             entry_mid = nxt[1]
             stop_pips = max(8.0, (max(b[2] for b in bars[i-13:i+1]) - min(b[3] for b in bars[i-13:i+1])) / pip)
             take_pips = 2.0*stop_pips
@@ -84,6 +87,8 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
                 cash += pnl
                 trades.append(pnl)
                 consecutive_losses = consecutive_losses+1 if pnl < 0 else 0
+                if cash <= day_start*.98 or consecutive_losses >= 5:
+                    halted_days.add(today)
                 position = None
                 last_exit = i
         curve.append(cash)
@@ -103,7 +108,8 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
             "win_rate_pct":round(100*sum(x>0 for x in trades)/len(trades),2) if trades else None,
             "max_drawdown_pct":round(100*dd,4),"rejected_costs":rejected_costs,
             "initial_capital_eur":INITIAL_EUR,"daily_loss_limit_eur":2.0,
-            "risk_per_trade_eur_initial":0.5,"max_consecutive_losses":5,
+            "risk_per_trade_eur_initial":0.5,"max_consecutive_losses":5,"halted_days":len(halted_days),
+            "max_simultaneous_positions":max_positions,
             "status":"RESEARCH_ONLY_NO_BROKER_ORDERS"}
 
 if __name__ == "__main__":
