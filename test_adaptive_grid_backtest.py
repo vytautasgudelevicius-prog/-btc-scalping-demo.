@@ -21,6 +21,15 @@ class AdaptiveGridTests(unittest.TestCase):
         b=simulate(rows,fee=.0005)
         self.assertLessEqual(a["net_pnl_eur"],b["net_pnl_eur"])
 
+    def test_high_fees_reject_unrealistic_grid(self):
+        result=simulate(self.bars(),fee=.008)
+        self.assertEqual(result['trades'],0)
+        self.assertGreater(result['rejected_costs'],0)
+
+    def test_holdout_does_not_assume_profitable_fills(self):
+        result=simulate(self.bars(trend=.1),fee=.008)
+        self.assertLessEqual(result['net_pnl_eur'],0)
+
     def test_insufficient_data(self):
         with self.assertRaises(ValueError):
             simulate(self.bars(100))
