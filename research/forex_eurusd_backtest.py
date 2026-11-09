@@ -50,12 +50,13 @@ def scalp_market_gate(bars, i, *, spread_pips, slippage_pips, commission_eur_per
         return False, "costs_exceed_volatility_budget", avg_range
     return True, "candidate_only", avg_range
 
-def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100k_side=3.5):
-    if len(bars) < 300 or min(spread_pips, slippage_pips, commission_eur_per_100k_side) < 0:
+def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100k_side=3.5, max_holding_bars=10):
+    if len(bars) < 300 or min(spread_pips, slippage_pips, commission_eur_per_100k_side) < 0 or max_holding_bars not in (1,2,3,4,5,10):
         raise ValueError("insufficient bars or invalid costs")
     cash = INITIAL_EUR
     position = None
     trades = []
+    holding_bars = []
     curve = [cash]
     rejected_costs = 0
     exit_reasons = {"stop":0,"take":0,"time":0}
@@ -108,7 +109,7 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
             take_mid = entry+side*take*pip
             hit_stop = now[3] <= stop_mid if side == 1 else now[2] >= stop_mid
             hit_take = now[2] >= take_mid if side == 1 else now[3] <= take_mid
-            exit_mid = (min(stop_mid,now[1]) if side==1 else max(stop_mid,now[1])) if hit_stop else take_mid if hit_take else nxt[1] if i-opened >= 10 else None
+            exit_mid = (min(stop_mid,now[1]) if side==1 else max(stop_mid,now[1])) if hit_stop else take_mid if hit_take else nxt[1] if i-opened >= max_holding_bars else None
             if exit_mid is not None:
                 exit_reasons["stop" if hit_stop else "take" if hit_take else "time"] += 1
                 gross_eur = side*(exit_mid-entry)*units/exit_mid
@@ -117,6 +118,7 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
                 pnl = gross_eur-spread_slip_eur-commissions
                 cash += pnl
                 trades.append(pnl)
+                holding_bars.append(i-opened+1)
                 consecutive_losses = consecutive_losses+1 if pnl < 0 else 0
                 if cash <= day_start*.98 or consecutive_losses >= 5:
                     halted_days.add(today)
@@ -129,6 +131,7 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
         pnl = side*(exit_mid-entry)*units/exit_mid-units*(spread_pips+2*slippage_pips)*pip/exit_mid-2*commission_eur_per_100k_side*units/100000
         cash += pnl
         trades.append(pnl)
+        holding_bars.append(len(bars)-1-position[3]+1)
         curve.append(cash)
     peak = INITIAL_EUR
     dd = 0.0
@@ -142,11 +145,13 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
             "risk_per_trade_eur_initial":0.5,"max_consecutive_losses":5,"halted_days":len(halted_days),
             "max_simultaneous_positions":max_positions,
             "market_rejections":market_rejections,"exit_reasons":exit_reasons,
-            "max_holding_minutes":10,
+            "max_holding_minutes":max_holding_bars,
+            "mean_holding_bars":round(sum(holding_bars)/len(holding_bars),2) if holding_bars else None,
+            "profitable_trades":sum(p>0 for p in trades),
             "status":"RESEARCH_ONLY_NO_BROKER_ORDERS"}
 
 if __name__ == "__main__":
     bars = load_bars(sys.argv[1])
     split = int(len(bars)*.7)
-    print(json.dumps({"pair":"EUR/USD","development":simulate(bars[:split]),
-                      "untouched_holdout":simulate(bars[split:])},indent=2))
+    print(json.dumps({"pair":"EUR/USD","development":{str(n):simulate(bars[:split],max_holding_bars=n) for n in (1,2,3,4,5,10)},
+                      "untouched_holdout":{str(n):simulate(bars[split:],max_holding_bars=n) for n in (1,2,3,4,5,10)}},indent=2))
