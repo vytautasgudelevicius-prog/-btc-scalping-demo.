@@ -50,3 +50,6 @@ jobs:
           python -m research.diagnose_entry_gate /tmp/kraken_snapshots.jsonl --fee 0
           echo '=== Sensitivity: zero fee and zero slippage, theoretical ceiling ==='
           python -m research.diagnose_entry_gate /tmp/kraken_snapshots.jsonl --fee 0 --slip 0
+
+          echo '=== Offline stop/target feasibility grid (not trading returns) ==='
+          python -m research.entry_geometry_grid /tmp/kraken_snapshots.jsonl
