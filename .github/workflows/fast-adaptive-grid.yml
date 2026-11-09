@@ -1,0 +1,48 @@
+name: Fast adaptive Grid research
+on:
+  pull_request:
+    paths:
+      - 'research/adaptive_grid_backtest.py'
+      - 'test_adaptive_grid_backtest.py'
+      - '.github/workflows/fast-adaptive-grid.yml'
+  workflow_dispatch:
+jobs:
+  grid-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify adaptive Grid tests
+        run: python -m unittest test_adaptive_grid_backtest -v
+      - name: Download public BTC/EUR historical proxy
+        run: python research/fetch_proxy_history.py
+      - name: Evaluate Grid on untouched holdout
+        run: |
+          python research/adaptive_grid_backtest.py research/history_btceur_proxy.csv > adaptive_grid.json
+          cat adaptive_grid.json
+      - name: Publish holdout verdict
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data=json.loads(Path('adaptive_grid.json').read_text())
+          lines=['# Adaptive Grid research-only verdict', '', 'Historical proxy, not actual Kraken fills.']
+          for name, scenario in data['results'].items():
+              h=scenario['untouched_holdout']
+              decision='DO_NOT_DEPLOY'
+              if h['net_pnl_eur']>0 and h['trades']>=100 and h['max_drawdown_pct']<=10:
+                  decision='RESEARCH_ONLY_REQUIRES_WALK_FORWARD'
+              lines.append(f"- {name}: {h}; **{decision}**")
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(lines))
+          print('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: adaptive-grid-only-results
+          path: adaptive_grid.json

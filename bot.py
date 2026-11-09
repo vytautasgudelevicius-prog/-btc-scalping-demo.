@@ -21,6 +21,7 @@ MAX_DAILY_ENTRIES = 16  # experimental paper scalping ceiling, not a target
 ENTRY_COOLDOWN_SECONDS = 300
 MAX_HOLD_SECONDS = 15 * 60
 MAX_GROSS_EXPOSURE = 0.30
+MAX_DAILY_LOSS_FRACTION = 0.02  # match research risk curriculum; never auto-reset loss streak
 # Kraken Pro base-tier taker fee (0.80% per side); marketable paper fills.
 # The spread is represented by ask on entry/bid on exit (reverse for shorts).
 # Simulated SHORT is hypothetical: spot Kraken trading does not offer uncollateralized shorts.
@@ -183,6 +184,17 @@ def trade_statistics(db, current_equity):
             "unknown": db.execute("SELECT COUNT(*) FROM closed_positions WHERE net_pnl IS NULL").fetchone()[0]}
 
 
+def entry_halt_reason(equity, day_start, recent_results):
+    """Fail closed; five-loss halt persists across UTC day changes."""
+    if len(recent_results) >= 5 and all(pnl < 0 for pnl in recent_results[:5]):
+        return "five_consecutive_losses"
+    if not (math.isfinite(equity) and math.isfinite(day_start)) or day_start <= 0:
+        return "invalid_daily_equity"
+    if equity <= day_start * (1 - MAX_DAILY_LOSS_FRACTION):
+        return "daily_loss_limit"
+    return None
+
+
 def trade(db, side, amount, price, fee, reason, equity):
     db.execute("INSERT INTO trades VALUES (?,?,?,?,?,?,?)", (dt.datetime.now(dt.timezone.utc).isoformat(), side, amount, price, fee, reason, equity))
 
@@ -296,17 +308,17 @@ def run():
             # Halt new entries after five consecutive losing closes, even across UTC days.
             recent_results = [r[0] for r in db.execute(
                 "SELECT net_pnl FROM closed_positions WHERE net_pnl IS NOT NULL ORDER BY closed DESC LIMIT 5")]
-            loss_streak_block = (len(recent_results) == 5 and all(pnl < 0 for pnl in recent_results))
-            daily_ok = day_start > 0 and equity >= day_start * 0.97 and not loss_streak_block
-            if loss_streak_block:
-                log.warning("PAPER ENTRY HALTED: five consecutive losses; exits remain active")
-            elif equity < day_start * 0.97:
-                log.warning("PAPER ENTRY HALTED: UTC-day loss limit; exits remain active")
+            halt_reason = entry_halt_reason(equity, day_start, recent_results)
+            daily_ok = halt_reason is None
+            if halt_reason:
+                log.warning("PAPER ENTRY HALTED reason=%s; exits remain active", halt_reason)
             gross = sum(abs(p[1]) * (ask if p[1] < 0 else bid) for p in items)
             if (candles_ok and spread_ok and not closed_any and daily_ok
                     and len(items) < MAX_OPEN and buys < MAX_DAILY_ENTRIES
                     and now - last_buy >= ENTRY_COOLDOWN_SECONDS and candle_time != last_candle):
                 direction = signal(candles)
+                if direction == "WAIT":
+                    log.info("PAPER SIGNAL REJECT reason=no_ema_crossover candle=%s", candle_time)
                 if direction != "WAIT":
                     try:
                         regime = market_regime()
@@ -315,12 +327,16 @@ def run():
                         # accounting, including any earlier position exits.
                         log.warning("Regime unavailable; entry disabled", exc_info=True)
                         regime, direction = "UNAVAILABLE", "WAIT"
-                    if (direction == "LONG" and regime == "BEAR") or (direction == "SHORT" and regime == "BULL"):
-                        log.info("PAPER entry blocked by market regime=%s signal=%s", regime, direction)
+                    if direction != "WAIT" and regime == "UNAVAILABLE":
+                        log.info("PAPER SIGNAL REJECT reason=market_regime_unavailable")
+                        direction = "WAIT"
+                    elif (direction == "LONG" and regime == "BEAR") or (direction == "SHORT" and regime == "BULL"):
+                        log.info("PAPER SIGNAL REJECT reason=market_regime_conflict regime=%s signal=%s", regime, direction)
                         direction = "WAIT"
                 # Do not hold opposing long and short positions simultaneously.
                 if items and ((direction == "LONG" and items[0][1] < 0)
                               or (direction == "SHORT" and items[0][1] > 0)):
+                    log.info("PAPER SIGNAL REJECT reason=opposing_open_position")
                     direction = "WAIT"
                 budget = min(max(0, equity) * 0.10,
                              max(0, equity * MAX_GROSS_EXPOSURE - gross),
@@ -332,12 +348,13 @@ def run():
                                                day_start, sum(pnl < 0 for pnl in recent_results))
                     if gate["decision"] != "PAPER_RESEARCH_CANDIDATE":
                         log.info("PAPER entry blocked by research gate: %s", gate["reason"])
+                        log.info("PAPER SIGNAL REJECT reason=research_gate_%s", gate["reason"])
                         direction = "WAIT"
                     elif not entry_quality(candles, direction) or not liquidity_and_atr_ok(candles):
-                        log.info("PAPER entry blocked by quality/liquidity gate")
+                        log.info("PAPER SIGNAL REJECT reason=quality_or_liquidity_gate")
                         direction = "WAIT"
                     if budget <= 5:
-                        log.info("PAPER signal rejected: budget=%.2f", budget)
+                        log.info("PAPER SIGNAL REJECT reason=insufficient_budget budget=%.2f", budget)
                 if direction in ("LONG", "SHORT") and budget > 5:
                     if direction == "LONG":
                         price = ask * (1 + SLIP)
