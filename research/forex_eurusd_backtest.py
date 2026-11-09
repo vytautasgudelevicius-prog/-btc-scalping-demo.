@@ -27,6 +27,29 @@ def load_bars(path):
         raise ValueError("bars must be strictly chronological")
     return bars
 
+def scalp_market_gate(bars, i, *, spread_pips, slippage_pips, commission_eur_per_100k_side):
+    """Assess only completed candles; return (allowed, reason, volatility_pips)."""
+    now = bars[i]
+    if now[0].weekday() >= 5:
+        return False, "market_closed", 0.0
+    recent = bars[i-19:i+1]
+    if len(recent) < 20:
+        return False, "insufficient_history", 0.0
+    if any((recent[j][0]-recent[j-1][0]).total_seconds() > 120 for j in range(1, len(recent))):
+        return False, "stale_or_gapped_data", 0.0
+    ranges = [(b[2]-b[3])/.0001 for b in recent]
+    avg_range = sum(ranges)/len(ranges)
+    if avg_range < 0.8:
+        return False, "too_quiet", avg_range
+    if avg_range > 12:
+        return False, "too_volatile", avg_range
+    # The mid-price OHLC cannot establish real-time bid/ask liquidity.
+    # This gate is a preliminary proxy, not a broker execution approval.
+    cost_pips = spread_pips + 2*slippage_pips + 2*commission_eur_per_100k_side*now[4]/10
+    if cost_pips >= max(0.5, avg_range*0.5):
+        return False, "costs_exceed_volatility_budget", avg_range
+    return True, "candidate_only", avg_range
+
 def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100k_side=3.5):
     if len(bars) < 300 or min(spread_pips, slippage_pips, commission_eur_per_100k_side) < 0:
         raise ValueError("insufficient bars or invalid costs")
@@ -35,6 +58,7 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
     trades = []
     curve = [cash]
     rejected_costs = 0
+    market_rejections = {}
     last_exit = -20
     consecutive_losses = 0
     day = None
@@ -57,8 +81,13 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
         mean_slow = sum(closes)/50
         # Completed bar determines direction, next bar open determines fill.
         direction = 1 if mean_fast > mean_slow * 1.00015 else -1 if mean_fast < mean_slow * .99985 else 0
-        # Avoid weekends, and only trade liquid London/NY overlap (UTC).
-        if position is None and direction and now[0].weekday() < 5 and 12 <= now[0].hour < 16 and i-last_exit >= 10 and today not in halted_days:
+        # Adaptive market-quality check replaces a fixed UTC trading window.
+        market_ok, market_reason, _ = scalp_market_gate(
+            bars, i, spread_pips=spread_pips, slippage_pips=slippage_pips,
+            commission_eur_per_100k_side=commission_eur_per_100k_side)
+        if not market_ok:
+            market_rejections[market_reason] = market_rejections.get(market_reason, 0) + 1
+        if position is None and direction and market_ok and i-last_exit >= 10 and today not in halted_days:
             entry_mid = nxt[1]
             stop_pips = max(8.0, (max(b[2] for b in bars[i-13:i+1]) - min(b[3] for b in bars[i-13:i+1])) / pip)
             take_pips = 2.0*stop_pips
@@ -110,6 +139,7 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
             "initial_capital_eur":INITIAL_EUR,"daily_loss_limit_eur":2.0,
             "risk_per_trade_eur_initial":0.5,"max_consecutive_losses":5,"halted_days":len(halted_days),
             "max_simultaneous_positions":max_positions,
+            "market_rejections":market_rejections,
             "status":"RESEARCH_ONLY_NO_BROKER_ORDERS"}
 
 if __name__ == "__main__":
