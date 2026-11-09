@@ -156,8 +156,15 @@ jobs:
           if grid:
               lines += ["## Adaptive Grid (research-only) holdout after costs"]
               for name, values in grid.get("results", {}).items():
-                  lines += [f"- {name}: {values.get('untouched_holdout')}"]
-              lines += [""]
+                  holdout = values.get("untouched_holdout", {})
+                  pnl = holdout.get("net_pnl_eur")
+                  trades = holdout.get("trades", 0)
+                  dd = holdout.get("max_drawdown_pct")
+                  approved = (pnl is not None and pnl > 0 and trades >= 100
+                              and dd is not None and dd <= 10)
+                  lines += [f"- {name}: {holdout}",
+                            f"- **Deployment verdict: {'RESEARCH_ONLY_NEEDS_WALK_FORWARD' if approved else 'DO_NOT_DEPLOY'}**"]
+              lines += ["- No live or DEMO promotion from this workflow.", ""]
           transfer = load("transfer_comparison")
           if transfer:
               btc = transfer["btc_only"]["test"]
