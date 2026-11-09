@@ -4,6 +4,7 @@ on:
     paths:
       - '.github/workflows/kraken-90day-backtest.yml'
       - 'research/forward_fill_backtest.py'
+      - 'research/holdout_backtest.py'
   workflow_dispatch:
 jobs:
   long-history:
