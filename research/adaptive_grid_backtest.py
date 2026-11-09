@@ -24,6 +24,8 @@ def simulate(rows, *, fee=.008, spread_bps=5., slippage_bps=2.,
     daily_start = cash
     day = None
     blocked_days = 0
+    rejected_costs = 0
+    rejected_targets = 0
     last_exit = -30
     friction = spread_bps / 20000 + slippage_bps / 10000
     if friction < 0 or stop_pct <= 0 or risk_fraction <= 0 or daily_limit <= 0:
@@ -43,6 +45,10 @@ def simulate(rows, *, fee=.008, spread_bps=5., slippage_bps=2.,
         # Range regime only: avoid directional moves that can break grids.
         ranging = abs(reference/slow-1) <= .008 and atr/current[4] <= .008
         grid_pct = max(.0025, min(.015, 1.8*atr/current[4]))
+        # Do not enter when a mean-reversion exit cannot cover roundtrip
+        # friction and a 1.5:1 net reward-to-risk requirement.
+        roundtrip_cost = 2*(fee+friction)
+        minimum_net_target = roundtrip_cost + 1.5*(stop_pct+roundtrip_cost)
         if pos:
             entry, qty, fee_in, opened, target = pos
             stop = entry*(1-stop_pct)
@@ -65,11 +71,22 @@ def simulate(rows, *, fee=.008, spread_bps=5., slippage_bps=2.,
         if not pos and i-last_exit >= 15 and ranging and cash > 0:
             # Entry when price drops one adaptive grid spacing below 60m mean.
             if current[4] <= reference*(1-grid_pct) and cash > daily_start*(1-daily_limit):
-                entry = nxt[1]*(1+friction)
+                # A grid is not profitable merely because its price bounces.
+                # Only consider exits near the observed mean; avoid assuming
+                # an implausibly large future price move to pay commissions.
+                projected_entry = nxt[1]*(1+friction)
+                achievable_target = reference/projected_entry-1
+                if grid_pct <= roundtrip_cost:
+                    rejected_costs += 1
+                    continue
+                if achievable_target < minimum_net_target:
+                    rejected_targets += 1
+                    continue
+                entry = projected_entry
                 unit_risk = stop_pct+2*fee+2*friction
                 notional = min(cash*.10, cash*risk_fraction/unit_risk)
                 qty = notional/entry
-                target = entry*(1+max(grid_pct,2*fee+2*friction+.001))
+                target = reference
                 pos = (entry,qty,entry*qty*fee,i+1,target)
             elif cash <= daily_start*(1-daily_limit):
                 blocked_days += 1
@@ -97,7 +114,9 @@ def simulate(rows, *, fee=.008, spread_bps=5., slippage_bps=2.,
             "net_pnl_eur":round(cash-INITIAL,4),
             "max_drawdown_pct":round(max_dd*100,4),
             "profit_factor":round(sum(x for x in trades if x>0)/-sum(x for x in trades if x<0),4) if any(x<0 for x in trades) else None,
-            "blocked_daily_entries":blocked_days}
+            "blocked_daily_entries":blocked_days,
+            "rejected_costs":rejected_costs,
+            "rejected_targets":rejected_targets}
 
 def main():
     rows=read_csv(sys.argv[1])
