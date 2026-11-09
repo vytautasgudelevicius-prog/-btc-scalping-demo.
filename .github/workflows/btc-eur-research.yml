@@ -252,6 +252,7 @@ jobs:
           name: btc-eur-research-results
           path: |
             baseline.json
+            adaptive_grid.json
             candles.json
             next_candle.json
             direction_model.json
