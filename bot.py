@@ -327,9 +327,11 @@ def run():
                         # accounting, including any earlier position exits.
                         log.warning("Regime unavailable; entry disabled", exc_info=True)
                         regime, direction = "UNAVAILABLE", "WAIT"
-                    if (direction == "LONG" and regime == "BEAR") or (direction == "SHORT" and regime == "BULL"):
-                        log.info("PAPER entry blocked by market regime=%s signal=%s", regime, direction)
+                    if direction != "WAIT" and regime == "UNAVAILABLE":
                         log.info("PAPER SIGNAL REJECT reason=market_regime_unavailable")
+                        direction = "WAIT"
+                    elif (direction == "LONG" and regime == "BEAR") or (direction == "SHORT" and regime == "BULL"):
+                        log.info("PAPER SIGNAL REJECT reason=market_regime_conflict regime=%s signal=%s", regime, direction)
                         direction = "WAIT"
                 # Do not hold opposing long and short positions simultaneously.
                 if items and ((direction == "LONG" and items[0][1] < 0)
