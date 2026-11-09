@@ -6,11 +6,15 @@ on:
       - 'test_entry_halt_diagnostics.py'
       - 'test_net_execution_costs.py'
       - 'research/net_execution_costs.py'
+      - 'research/adaptive_grid_backtest.py'
+      - 'test_adaptive_grid_backtest.py'
       - '.github/workflows/btc-eur-research.yml'
   push:
     paths:
       - 'research/fetch_proxy_history.py'
       - 'research/backtest_candles.py'
+      - 'research/adaptive_grid_backtest.py'
+      - 'test_adaptive_grid_backtest.py'
       - 'research/evaluate_next_candle.py'
       - 'research/train_direction.py'
       - 'research/train_multimarket.py'
@@ -80,13 +84,15 @@ jobs:
         with:
           python-version: '3.11'
       - name: Verify candle tests
-        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena test_auto_optimize test_leverage_simulator test_technical_analysis_engine test_forecast_expected_value test_cross_market_context test_research_safety test_paper_integration test_entry_halt_diagnostics test_net_execution_costs test_strong_signal_backtest test_strong_signal_walk_forward test_best_scalping_hours test_autonomous_decision_cycle test_kraken_shadow_observer test_kraken_shadow_forward -v
+        run: python -m unittest test_candles test_candle_backtest test_train_direction test_trading_curriculum test_cost_edge test_risk_curriculum test_market_regime test_compare_strategies test_strategy_arena test_auto_optimize test_leverage_simulator test_technical_analysis_engine test_forecast_expected_value test_cross_market_context test_research_safety test_paper_integration test_entry_halt_diagnostics test_net_execution_costs test_adaptive_grid_backtest test_strong_signal_backtest test_strong_signal_walk_forward test_best_scalping_hours test_autonomous_decision_cycle test_kraken_shadow_observer test_kraken_shadow_forward -v
       - name: Download BTC EUR 1m public historical proxy
         run: python research/fetch_proxy_history.py
       - name: Download ETH and SOL historical proxy data
         run: python research/fetch_multimarket_history.py
       - name: Run baseline EMA strategy
         run: python backtest.py research/history_btceur_proxy.csv > baseline.json
+      - name: Run adaptive grid holdout after costs
+        run: python research/adaptive_grid_backtest.py research/history_btceur_proxy.csv > adaptive_grid.json
       - name: Run candle strategy
         run: python research/backtest_candles.py research/history_btceur_proxy.csv > candles.json
       - name: Evaluate next 5m candle direction on holdout
@@ -130,7 +136,7 @@ jobs:
         run: |
           python - <<'PY'
           import json
-          for name in ('baseline', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'multihour_edge', 'multihour_fee_scenarios', 'auto_optimize', 'fee_sensitivity', 'forecast_expected_value', 'strong_signal_backtest', 'strong_signal_walk_forward', 'best_scalping_hours', 'autonomous_decision_cycle', 'market_forecasts', 'btc_walk_forward', 'eth_walk_forward', 'sol_walk_forward'):
+          for name in ('baseline', 'adaptive_grid', 'candles', 'next_candle', 'direction_model', 'transfer_comparison', 'cost_edge', 'strategy_comparison', 'strategy_arena', 'multihour_edge', 'multihour_fee_scenarios', 'auto_optimize', 'fee_sensitivity', 'forecast_expected_value', 'strong_signal_backtest', 'strong_signal_walk_forward', 'best_scalping_hours', 'autonomous_decision_cycle', 'market_forecasts', 'btc_walk_forward', 'eth_walk_forward', 'sol_walk_forward'):
               data=json.load(open(name+'.json'))
               print(name, json.dumps(data, indent=2)[:14000])
           PY
@@ -146,6 +152,12 @@ jobs:
           def load(name):
               path = Path(name + ".json")
               return json.loads(path.read_text()) if path.exists() else None
+          grid = load("adaptive_grid")
+          if grid:
+              lines += ["## Adaptive Grid (research-only) holdout after costs"]
+              for name, values in grid.get("results", {}).items():
+                  lines += [f"- {name}: {values.get('untouched_holdout')}"]
+              lines += [""]
           transfer = load("transfer_comparison")
           if transfer:
               btc = transfer["btc_only"]["test"]
