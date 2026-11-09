@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime, timedelta, timezone
-from research.forex_eurusd_backtest import INITIAL_EUR, simulate
+from research.forex_eurusd_backtest import INITIAL_EUR, simulate, scalp_market_gate
 
 class ForexResearchTests(unittest.TestCase):
     def bars(self, count=700, trending=True):
@@ -28,6 +28,25 @@ class ForexResearchTests(unittest.TestCase):
     def test_reject_invalid_history(self):
         with self.assertRaises(ValueError):
             simulate(self.bars(count=50))
+
+    def test_market_gate_rejects_quiet_market(self):
+        bars=self.bars(trending=False)
+        ok,reason,_=scalp_market_gate(bars,250,spread_pips=1,slippage_pips=.2,commission_eur_per_100k_side=3.5)
+        self.assertFalse(ok)
+        self.assertEqual(reason,'too_quiet')
+
+    def test_market_gate_rejects_high_costs(self):
+        bars=self.bars()
+        ok,reason,_=scalp_market_gate(bars,250,spread_pips=20,slippage_pips=2,commission_eur_per_100k_side=10)
+        self.assertFalse(ok)
+        self.assertEqual(reason,'costs_exceed_volatility_budget')
+
+    def test_market_gate_rejects_stale_data(self):
+        bars=self.bars()
+        bars[249]=(bars[249][0]-timedelta(minutes=4),*bars[249][1:])
+        ok,reason,_=scalp_market_gate(bars,250,spread_pips=0,slippage_pips=0,commission_eur_per_100k_side=0)
+        self.assertFalse(ok)
+        self.assertEqual(reason,'stale_or_gapped_data')
 
     def test_reports_risk_controls(self):
         result=simulate(self.bars())
