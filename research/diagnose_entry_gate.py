@@ -39,18 +39,21 @@ def analyze(path,fee=None,slip=None):
                 # Exact target price required for 2:1 net reward after exit slip and fees.
                 required_target=(entry*(1+fee)+2*risk)/((1-slip)*(1-fee)) if d=="LONG" else (entry*(1-fee)-2*risk)/((1+slip)*(1+fee))
                 required_move=abs(required_target-entry)/entry*100
-                actual_move=abs(target-entry)/entry*100
+                actual_move=((target-entry) if d=="LONG" else (entry-target))/entry*100
+                if actual_move<=0: counts["target_behind_entry"]+=1
+                else: counts["target_ahead_of_entry"]+=1
                 target_requirements.append((required_move,actual_move))
                 wide=abs(entry-stop)/entry>.03
                 if wide: counts["stop_over_3pct"]+=1
                 if net<=0: counts["nonpositive_net_reward"]+=1
                 if net<2*risk: counts["net_rr_below_2"]+=1
                 if net>=2*risk and not wide: counts["would_open_if_flat"]+=1
-                if len(samples)<5: samples.append({"time":r["timestamp_utc"],"direction":d,"net_rr":round(rr,3) if rr is not None else None,"stop_pct":round(abs(entry-stop)/entry*100,3),"target_pct":round(abs(target-entry)/entry*100,3)})
+                if len(samples)<5: samples.append({"time":r["timestamp_utc"],"direction":d,"net_rr":round(rr,3) if rr is not None else None,"stop_pct":round(abs(entry-stop)/entry*100,3),"signed_target_pct":round(actual_move,3)})
     required_sorted=sorted(x[0] for x in target_requirements)
     actual_sorted=sorted(x[1] for x in target_requirements)
+    positive_targets=sorted(x[1] for x in target_requirements if x[1]>0)
     median=lambda values: round(values[len(values)//2],3) if values else None
-    return {"required_target_move_median_pct":median(required_sorted),"available_target_move_median_pct":median(actual_sorted),"fee_one_way":fee,"slippage_one_way":slip,"counts":dict(counts),"sample_candidates":samples,"note":"Counterfactual signal math on point-in-time Kraken snapshots; not actual fills or trading PnL."}
+    return {"required_target_move_median_pct":median(required_sorted),"signed_target_move_median_pct":median(actual_sorted),"positive_target_move_median_pct":median(positive_targets),"fee_one_way":fee,"slippage_one_way":slip,"counts":dict(counts),"sample_candidates":samples,"note":"Counterfactual signal math on point-in-time Kraken snapshots; not actual fills or trading PnL."}
 
 if __name__=="__main__":
     ap=argparse.ArgumentParser()
