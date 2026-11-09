@@ -35,3 +35,7 @@ jobs:
         run: |
           python -m research.build_kraken_replay --output /tmp/kraken_snapshots.jsonl
           python -m research.offline_replay /tmp/kraken_snapshots.jsonl
+          echo '=== Sensitivity: reduced fee 0.4% per side ==='
+          python -m research.offline_replay /tmp/kraken_snapshots.jsonl --fee 0.004
+          echo '=== Sensitivity: reduced fee 0.2% per side ==='
+          python -m research.offline_replay /tmp/kraken_snapshots.jsonl --fee 0.002
