@@ -58,6 +58,7 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
     trades = []
     curve = [cash]
     rejected_costs = 0
+    exit_reasons = {"stop":0,"take":0,"time":0}
     market_rejections = {}
     last_exit = -20
     consecutive_losses = 0
@@ -107,8 +108,9 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
             take_mid = entry+side*take*pip
             hit_stop = now[3] <= stop_mid if side == 1 else now[2] >= stop_mid
             hit_take = now[2] >= take_mid if side == 1 else now[3] <= take_mid
-            exit_mid = (min(stop_mid,now[1]) if side==1 else max(stop_mid,now[1])) if hit_stop else take_mid if hit_take else nxt[1] if i-opened >= 60 else None
+            exit_mid = (min(stop_mid,now[1]) if side==1 else max(stop_mid,now[1])) if hit_stop else take_mid if hit_take else nxt[1] if i-opened >= 10 else None
             if exit_mid is not None:
+                exit_reasons["stop" if hit_stop else "take" if hit_take else "time"] += 1
                 gross_eur = side*(exit_mid-entry)*units/exit_mid
                 spread_slip_eur = units*(spread_pips+2*slippage_pips)*pip/exit_mid
                 commissions = 2*commission_eur_per_100k_side*units/100000
@@ -139,7 +141,8 @@ def simulate(bars, *, spread_pips=1.0, slippage_pips=0.2, commission_eur_per_100
             "initial_capital_eur":INITIAL_EUR,"daily_loss_limit_eur":2.0,
             "risk_per_trade_eur_initial":0.5,"max_consecutive_losses":5,"halted_days":len(halted_days),
             "max_simultaneous_positions":max_positions,
-            "market_rejections":market_rejections,
+            "market_rejections":market_rejections,"exit_reasons":exit_reasons,
+            "max_holding_minutes":10,
             "status":"RESEARCH_ONLY_NO_BROKER_ORDERS"}
 
 if __name__ == "__main__":
