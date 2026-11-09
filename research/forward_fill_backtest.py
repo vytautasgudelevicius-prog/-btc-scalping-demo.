@@ -37,7 +37,10 @@ def run(path,fee=.0005,slip=.0002,stop_pct=.0025,rr=1.5,max_hold=120):
             else:
                 stop_hit=candle["high"]>=active["stop"]
                 target_hit=candle["low"]<=active["target"]
-            if stop_hit:close(active,active["stop"],stamp,"STOP_FIRST")
+            if stop_hit:
+                # Gap through a stop must fill at the worse opening quote, not at the stop.
+                adverse_open=min(active["stop"],candle["open"]) if active["direction"]=="LONG" else max(active["stop"],candle["open"])
+                close(active,adverse_open,stamp,"STOP_GAP" if adverse_open!=active["stop"] else "STOP_FIRST")
             elif target_hit:close(active,active["target"],stamp,"TARGET")
             elif active["bars"]>=max_hold:close(active,candle["close"],stamp,"TIMEOUT")
         # Do not open and exit using the same OHLC bar: next-bar open is used.
@@ -54,6 +57,10 @@ def run(path,fee=.0005,slip=.0002,stop_pct=.0025,rr=1.5,max_hold=120):
             risk=abs(entry-stop_fill)+(entry+stop_fill)*fee
             reward=(target_fill-entry if direction=="LONG" else entry-target_fill)-(entry+target_fill)*fee
             if reward<rr*risk or abs(entry-stop)/entry>.03 or risk<=0:reject("next_open_net_rr");continue
+            # Do not claim a next-open entry when the same minute already opened
+            # beyond the precomputed profit target (stale signal).
+            if (direction=="LONG" and op>=target) or (direction=="SHORT" and op<=target):
+                reject("stale_target_at_open");continue
             qty=min(equity*.005/risk,equity/entry)
             if qty<=0:reject("zero_quantity");continue
             active={"direction":direction,"entry":entry,"stop":stop,"target":target,"qty":qty,"time":stamp,"bars":0}
