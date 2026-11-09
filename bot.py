@@ -184,6 +184,17 @@ def trade_statistics(db, current_equity):
             "unknown": db.execute("SELECT COUNT(*) FROM closed_positions WHERE net_pnl IS NULL").fetchone()[0]}
 
 
+def entry_halt_reason(equity, day_start, recent_results):
+    """Fail closed; five-loss halt persists across UTC day changes."""
+    if len(recent_results) >= 5 and all(pnl < 0 for pnl in recent_results[:5]):
+        return "five_consecutive_losses"
+    if not (math.isfinite(equity) and math.isfinite(day_start)) or day_start <= 0:
+        return "invalid_daily_equity"
+    if equity <= day_start * (1 - MAX_DAILY_LOSS_FRACTION):
+        return "daily_loss_limit"
+    return None
+
+
 def trade(db, side, amount, price, fee, reason, equity):
     db.execute("INSERT INTO trades VALUES (?,?,?,?,?,?,?)", (dt.datetime.now(dt.timezone.utc).isoformat(), side, amount, price, fee, reason, equity))
 
@@ -297,14 +308,10 @@ def run():
             # Halt new entries after five consecutive losing closes, even across UTC days.
             recent_results = [r[0] for r in db.execute(
                 "SELECT net_pnl FROM closed_positions WHERE net_pnl IS NOT NULL ORDER BY closed DESC LIMIT 5")]
-            loss_streak_block = (len(recent_results) == 5 and all(pnl < 0 for pnl in recent_results))
-            daily_ok = day_start > 0 and equity > day_start * (1 - MAX_DAILY_LOSS_FRACTION) and not loss_streak_block
-            if loss_streak_block:
-                log.info("PAPER SIGNAL REJECT reason=five_consecutive_losses")
-                log.warning("PAPER ENTRY HALTED: five consecutive losses; exits remain active")
-            elif day_start <= 0 or equity <= day_start * (1 - MAX_DAILY_LOSS_FRACTION):
-                log.info("PAPER SIGNAL REJECT reason=daily_loss_limit_or_invalid_start")
-                log.warning("PAPER ENTRY HALTED: UTC-day loss limit; exits remain active")
+            halt_reason = entry_halt_reason(equity, day_start, recent_results)
+            daily_ok = halt_reason is None
+            if halt_reason:
+                log.warning("PAPER ENTRY HALTED reason=%s; exits remain active", halt_reason)
             gross = sum(abs(p[1]) * (ask if p[1] < 0 else bid) for p in items)
             if (candles_ok and spread_ok and not closed_any and daily_ok
                     and len(items) < MAX_OPEN and buys < MAX_DAILY_ENTRIES
