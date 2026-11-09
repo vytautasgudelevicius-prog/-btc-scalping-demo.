@@ -1,0 +1,28 @@
+name: EUR USD Forex DEMO safety tests
+on:
+  pull_request:
+    paths:
+      - 'research/forex_eurusd_backtest.py'
+      - 'test_forex_eurusd_backtest.py'
+      - '.github/workflows/forex-demo-tests.yml'
+  workflow_dispatch:
+jobs:
+  forex-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test EUR/USD DEMO backtest and risk limits
+        run: python -m unittest test_forex_eurusd_backtest -v
+      - name: Confirm research-only mode
+        run: |
+          python - <<'PY'
+          from research.forex_eurusd_backtest import INITIAL_EUR
+          assert INITIAL_EUR == 100.0
+          print('EUR/USD DEMO research only. No broker credentials or orders.')
+          PY
